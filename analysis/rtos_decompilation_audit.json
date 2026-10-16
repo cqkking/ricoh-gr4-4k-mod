@@ -1,0 +1,544 @@
+{
+  "rtos_vaddr_base": "0x53000000",
+  "rtos_payload_offset": "0x17d10",
+  "xref_survival_audit": [
+    {
+      "label": "CreateRecipeSequenceMov4kExt",
+      "string_vaddr": "0x53eb18d0",
+      "status": "ACTIVE_REFERENCED",
+      "code_xrefs": [
+        {
+          "vaddr": "0x536498c4",
+          "payload_offset": "0x006615d4"
+        }
+      ]
+    },
+    {
+      "label": "CreateRecipeSequenceMov4kRemote",
+      "string_vaddr": "0x53eb18f0",
+      "status": "ACTIVE_REFERENCED",
+      "code_xrefs": [
+        {
+          "vaddr": "0x53648d78",
+          "payload_offset": "0x00660a88"
+        }
+      ]
+    },
+    {
+      "label": "[LVC] for Debug 4K Movie!",
+      "string_vaddr": "0x53eae744",
+      "status": "ACTIVE_REFERENCED",
+      "code_xrefs": [
+        {
+          "vaddr": "0x5362e514",
+          "payload_offset": "0x00646224"
+        }
+      ]
+    },
+    {
+      "label": "7:3840x2160p/30Hz",
+      "string_vaddr": "0x540404cc",
+      "status": "ACTIVE_REFERENCED",
+      "code_xrefs": [
+        {
+          "vaddr": "0x53055d44",
+          "payload_offset": "0x0006da54"
+        }
+      ]
+    },
+    {
+      "label": "GetLv4k",
+      "string_vaddr": "0x53fd8124",
+      "status": "ACTIVE_REFERENCED",
+      "code_xrefs": [
+        {
+          "vaddr": "0x538c7e60",
+          "payload_offset": "0x008dfb70"
+        }
+      ]
+    },
+    {
+      "label": "ConvertToH264CodecDefsImageSize",
+      "string_vaddr": "0x53ec91c0",
+      "status": "ACTIVE_REFERENCED",
+      "code_xrefs": [
+        {
+          "vaddr": "0x536c34a4",
+          "payload_offset": "0x006db1b4"
+        }
+      ]
+    },
+    {
+      "label": "src/H264Processor.cpp",
+      "string_vaddr": "0x53ec71dc",
+      "status": "ACTIVE_REFERENCED",
+      "code_xrefs": [
+        {
+          "vaddr": "0x536d450c",
+          "payload_offset": "0x006ec21c"
+        },
+        {
+          "vaddr": "0x536d4554",
+          "payload_offset": "0x006ec264"
+        },
+        {
+          "vaddr": "0x536d4b9c",
+          "payload_offset": "0x006ec8ac"
+        },
+        {
+          "vaddr": "0x536d4df4",
+          "payload_offset": "0x006ecb04"
+        },
+        {
+          "vaddr": "0x536d4f98",
+          "payload_offset": "0x006ecca8"
+        },
+        {
+          "vaddr": "0x536d4fe4",
+          "payload_offset": "0x006eccf4"
+        },
+        {
+          "vaddr": "0x536d5024",
+          "payload_offset": "0x006ecd34"
+        },
+        {
+          "vaddr": "0x536d50a8",
+          "payload_offset": "0x006ecdb8"
+        },
+        {
+          "vaddr": "0x536d50ec",
+          "payload_offset": "0x006ecdfc"
+        },
+        {
+          "vaddr": "0x536d513c",
+          "payload_offset": "0x006ece4c"
+        },
+        {
+          "vaddr": "0x536d51a4",
+          "payload_offset": "0x006eceb4"
+        },
+        {
+          "vaddr": "0x536d51e0",
+          "payload_offset": "0x006ecef0"
+        },
+        {
+          "vaddr": "0x536d5208",
+          "payload_offset": "0x006ecf18"
+        },
+        {
+          "vaddr": "0x536d536c",
+          "payload_offset": "0x006ed07c"
+        },
+        {
+          "vaddr": "0x536d5444",
+          "payload_offset": "0x006ed154"
+        },
+        {
+          "vaddr": "0x536d5508",
+          "payload_offset": "0x006ed218"
+        },
+        {
+          "vaddr": "0x536d5780",
+          "payload_offset": "0x006ed490"
+        },
+        {
+          "vaddr": "0x536d57b4",
+          "payload_offset": "0x006ed4c4"
+        },
+        {
+          "vaddr": "0x536d58d4",
+          "payload_offset": "0x006ed5e4"
+        },
+        {
+          "vaddr": "0x536d5950",
+          "payload_offset": "0x006ed660"
+        },
+        {
+          "vaddr": "0x536d6550",
+          "payload_offset": "0x006ee260"
+        },
+        {
+          "vaddr": "0x536d668c",
+          "payload_offset": "0x006ee39c"
+        },
+        {
+          "vaddr": "0x536d670c",
+          "payload_offset": "0x006ee41c"
+        },
+        {
+          "vaddr": "0x536d73f8",
+          "payload_offset": "0x006ef108"
+        }
+      ]
+    },
+    {
+      "label": "RiberyM9M_Codec/.../H265/WAVE/Project/vdi/src/mm.c",
+      "string_vaddr": "0x53ce8d58",
+      "status": "ACTIVE_REFERENCED",
+      "code_xrefs": [
+        {
+          "vaddr": "0x53111544",
+          "payload_offset": "0x00129254"
+        },
+        {
+          "vaddr": "0x531115f0",
+          "payload_offset": "0x00129300"
+        },
+        {
+          "vaddr": "0x53111e64",
+          "payload_offset": "0x00129b74"
+        },
+        {
+          "vaddr": "0x53111e94",
+          "payload_offset": "0x00129ba4"
+        },
+        {
+          "vaddr": "0x5311201c",
+          "payload_offset": "0x00129d2c"
+        },
+        {
+          "vaddr": "0x531127b0",
+          "payload_offset": "0x0012a4c0"
+        },
+        {
+          "vaddr": "0x53112860",
+          "payload_offset": "0x0012a570"
+        }
+      ]
+    },
+    {
+      "label": "H265_Wave_Initialize (high-level wrapper string)",
+      "string_vaddr": "0x5436ac74",
+      "status": "RODATA_ONLY_GC_STRIPPED",
+      "code_xrefs": []
+    },
+    {
+      "label": "FJ_VideoEncoder_Setup(h265) (high-level wrapper string)",
+      "string_vaddr": "0x5435f00c",
+      "status": "RODATA_ONLY_GC_STRIPPED",
+      "code_xrefs": []
+    },
+    {
+      "label": "FJ_VideoEncoder_Setup(h264) (high-level wrapper string)",
+      "string_vaddr": "0x5435f178",
+      "status": "RODATA_ONLY_GC_STRIPPED",
+      "code_xrefs": []
+    }
+  ],
+  "windows": [
+    {
+      "id": "image_control_look_visibility",
+      "title": "Image Control (Look) Visibility Check & Branch (Payload 0x003e43c0..0x003e4468)",
+      "start_vaddr": "0x533cc6b0",
+      "end_vaddr": "0x533cc758",
+      "disassembly": [
+        "0x533cc6b0 (pay 0x003e43c0): 14d04be2  sub      sp, fp, #0x14",
+        "0x533cc6b4 (pay 0x003e43c4): 30689de8  ldm      sp, {r4, r5, fp, sp, lr}",
+        "0x533cc6b8 (pay 0x003e43c8): 1f4f00ea  b        #0x533e033c",
+        "0x533cc6bc (pay 0x003e43cc): 0610a0e3  mov      r1, #6",
+        "0x533cc6c0 (pay 0x003e43d0): 1d4f00eb  bl       #0x533e033c",
+        "0x533cc6c4 (pay 0x003e43d4): 000050e3  cmp      r0, #0",
+        "0x533cc6c8 (pay 0x003e43d8): e8ffff0a  beq      #0x533cc670",
+        "0x533cc6cc (pay 0x003e43dc): edffffea  b        #0x533cc688",
+        "0x533cc6d0 (pay 0x003e43e0): 0710a0e3  mov      r1, #7",
+        "0x533cc6d4 (pay 0x003e43e4): 14d04be2  sub      sp, fp, #0x14",
+        "0x533cc6d8 (pay 0x003e43e8): 30689de8  ldm      sp, {r4, r5, fp, sp, lr}",
+        "0x533cc6dc (pay 0x003e43ec): 164f00ea  b        #0x533e033c",
+        "0x533cc6e0 (pay 0x003e43f0): 000052e3  cmp      r2, #0",
+        "0x533cc6e4 (pay 0x003e43f4): 1900001a  bne      #0x533cc750",
+        "0x533cc6e8 (pay 0x003e43f8): 0b1041e2  sub      r1, r1, #0xb",
+        "0x533cc6ec (pay 0x003e43fc): 0d0051e3  cmp      r1, #0xd",
+        "0x533cc6f0 (pay 0x003e4400): 01f19f97  ldrls    pc, [pc, r1, lsl #2]",
+        "0x533cc6f4 (pay 0x003e4404): 130000ea  b        #0x533cc748",
+        "0x533cc6f8 (pay 0x003e4408): 30c73c53  teqpl    ip, #48, #14",
+        "0x533cc6fc (pay 0x003e440c): 30c73c53  teqpl    ip, #48, #14",
+        "0x533cc700 (pay 0x003e4410): 30c73c53  teqpl    ip, #48, #14",
+        "0x533cc704 (pay 0x003e4414): 38c73c53  teqpl    ip, #56, #14",
+        "0x533cc708 (pay 0x003e4418): 30c73c53  teqpl    ip, #48, #14",
+        "0x533cc70c (pay 0x003e441c): 30c73c53  teqpl    ip, #48, #14",
+        "0x533cc710 (pay 0x003e4420): 30c73c53  teqpl    ip, #48, #14",
+        "0x533cc714 (pay 0x003e4424): 30c73c53  teqpl    ip, #48, #14",
+        "0x533cc718 (pay 0x003e4428): 30c73c53  teqpl    ip, #48, #14",
+        "0x533cc71c (pay 0x003e442c): 30c73c53  teqpl    ip, #48, #14",
+        "0x533cc720 (pay 0x003e4430): 30c73c53  teqpl    ip, #48, #14",
+        "0x533cc724 (pay 0x003e4434): 38c73c53  teqpl    ip, #56, #14",
+        "0x533cc728 (pay 0x003e4438): 30c73c53  teqpl    ip, #48, #14",
+        "0x533cc72c (pay 0x003e443c): 30c73c53  teqpl    ip, #48, #14",
+        "0x533cc730 (pay 0x003e4440): 0100a0e3  mov      r0, #1",
+        "0x533cc734 (pay 0x003e4444): 1eff2fe1  bx       lr",
+        "0x533cc738 (pay 0x003e4448): 1f00d0e5  ldrb     r0, [r0, #0x1f]",
+        "0x533cc73c (pay 0x003e444c): 010050e2  subs     r0, r0, #1",
+        "0x533cc740 (pay 0x003e4450): 0100a013  movne    r0, #1",
+        "0x533cc744 (pay 0x003e4454): 1eff2fe1  bx       lr",
+        "0x533cc748 (pay 0x003e4458): 0000a0e3  mov      r0, #0",
+        "0x533cc74c (pay 0x003e445c): 1eff2fe1  bx       lr",
+        "0x533cc750 (pay 0x003e4460): b1ffffea  b        #0x533cc61c",
+        "0x533cc754 (pay 0x003e4464): 0dc0a0e1  mov      ip, sp"
+      ]
+    },
+    {
+      "id": "movie_4k_recipe_sequence",
+      "title": "Active 4K Movie Recipe Planner (CreateRecipeSequenceMov4kExt / Mov4kRemote @ 0x53649880..0x53649950)",
+      "start_vaddr": "0x53649880",
+      "end_vaddr": "0x53649950",
+      "disassembly": [
+        "0x53649880 (pay 0x00661590): eb5345e3  movt     r5, #0x53eb",
+        "0x53649884 (pay 0x00661594): edffffea  b        #0x53649840",
+        "0x53649888 (pay 0x00661598): 00e08de5  str      lr, [sp]",
+        "0x5364988c (pay 0x0066159c): 445901e3  movw     r5, #0x1944",
+        "0x53649890 (pay 0x006615a0): c9fdffeb  bl       #0x53648fbc",
+        "0x53649894 (pay 0x006615a4): eb5345e3  movt     r5, #0x53eb  ; 0x53eb1944 -> \"CreateRecipeSequence\"",
+        "0x53649898 (pay 0x006615a8): e8ffffea  b        #0x53649840",
+        "0x5364989c (pay 0x006615ac): 00e08de5  str      lr, [sp]",
+        "0x536498a0 (pay 0x006615b0): 445901e3  movw     r5, #0x1944",
+        "0x536498a4 (pay 0x006615b4): 11feffeb  bl       #0x536490f0",
+        "0x536498a8 (pay 0x006615b8): eb5345e3  movt     r5, #0x53eb  ; 0x53eb1944 -> \"CreateRecipeSequence\"",
+        "0x536498ac (pay 0x006615bc): e3ffffea  b        #0x53649840",
+        "0x536498b0 (pay 0x006615c0): 00e08de5  str      lr, [sp]",
+        "0x536498b4 (pay 0x006615c4): 445901e3  movw     r5, #0x1944",
+        "0x536498b8 (pay 0x006615c8): 64feffeb  bl       #0x53649250",
+        "0x536498bc (pay 0x006615cc): eb5345e3  movt     r5, #0x53eb  ; 0x53eb1944 -> \"CreateRecipeSequence\"",
+        "0x536498c0 (pay 0x006615d0): deffffea  b        #0x53649840",
+        "0x536498c4 (pay 0x006615d4): d03801e3  movw     r3, #0x18d0",
+        "0x536498c8 (pay 0x006615d8): 201806e3  movw     r1, #0x6820",
+        "0x536498cc (pay 0x006615dc): eb3345e3  movt     r3, #0x53eb  ; 0x53eb18d0 -> \"CreateRecipeSequenceMov4kExt\"",
+        "0x536498d0 (pay 0x006615e0): 782800e3  movw     r2, #0x878",
+        "0x536498d4 (pay 0x006615e4): 00308de5  str      r3, [sp]",
+        "0x536498d8 (pay 0x006615e8): fd1345e3  movt     r1, #0x53fd  ; 0x53fd6820 -> \"0\"",
+        "0x536498dc (pay 0x006615ec): eb2345e3  movt     r2, #0x53eb  ; 0x53eb0878 -> \"src/LiveViewSequencePlanner.cpp\"",
+        "0x536498e0 (pay 0x006615f0): 0000a0e3  mov      r0, #0",
+        "0x536498e4 (pay 0x006615f4): 493fa0e3  mov      r3, #0x124",
+        "0x536498e8 (pay 0x006615f8): 445901e3  movw     r5, #0x1944",
+        "0x536498ec (pay 0x006615fc): 0f900aeb  bl       #0x538ed930",
+        "0x536498f0 (pay 0x00661600): eb5345e3  movt     r5, #0x53eb  ; 0x53eb1944 -> \"CreateRecipeSequence\"",
+        "0x536498f4 (pay 0x00661604): d1ffffea  b        #0x53649840",
+        "0x536498f8 (pay 0x00661608): 243901e3  movw     r3, #0x1924",
+        "0x536498fc (pay 0x0066160c): 201806e3  movw     r1, #0x6820",
+        "0x53649900 (pay 0x00661610): eb3345e3  movt     r3, #0x53eb  ; 0x53eb1924 -> \"CreateRecipeSequenceMov4kRemote\"",
+        "0x53649904 (pay 0x00661614): 782800e3  movw     r2, #0x878",
+        "0x53649908 (pay 0x00661618): 00308de5  str      r3, [sp]",
+        "0x5364990c (pay 0x0066161c): fd1345e3  movt     r1, #0x53fd  ; 0x53fd6820 -> \"0\"",
+        "0x53649910 (pay 0x00661620): eb2345e3  movt     r2, #0x53eb  ; 0x53eb0878 -> \"src/LiveViewSequencePlanner.cpp\"",
+        "0x53649914 (pay 0x00661624): 0000a0e3  mov      r0, #0",
+        "0x53649918 (pay 0x00661628): 3e3100e3  movw     r3, #0x13e",
+        "0x5364991c (pay 0x0066162c): 445901e3  movw     r5, #0x1944",
+        "0x53649920 (pay 0x00661630): 02900aeb  bl       #0x538ed930",
+        "0x53649924 (pay 0x00661634): eb5345e3  movt     r5, #0x53eb  ; 0x53eb1944 -> \"CreateRecipeSequence\"",
+        "0x53649928 (pay 0x00661638): c4ffffea  b        #0x53649840",
+        "0x5364992c (pay 0x0066163c): 00e08de5  str      lr, [sp]",
+        "0x53649930 (pay 0x00661640): 445901e3  movw     r5, #0x1944",
+        "0x53649934 (pay 0x00661644): 9dfeffeb  bl       #0x536493b0",
+        "0x53649938 (pay 0x00661648): eb5345e3  movt     r5, #0x53eb  ; 0x53eb1944 -> \"CreateRecipeSequence\"",
+        "0x5364993c (pay 0x0066164c): bfffffea  b        #0x53649840",
+        "0x53649940 (pay 0x00661650): 00e08de5  str      lr, [sp]",
+        "0x53649944 (pay 0x00661654): 445901e3  movw     r5, #0x1944",
+        "0x53649948 (pay 0x00661658): 11ffffeb  bl       #0x53649594",
+        "0x5364994c (pay 0x0066165c): eb5345e3  movt     r5, #0x53eb  ; 0x53eb1944 -> \"CreateRecipeSequence\""
+      ]
+    },
+    {
+      "id": "lvc_debug_4k_movie",
+      "title": "Active LiveView Controller Debug 4K Movie Handler (@ 0x5362e4d0..0x5362e570)",
+      "start_vaddr": "0x5362e4d0",
+      "end_vaddr": "0x5362e570",
+      "disassembly": [
+        "0x5362e4d0 (pay 0x006461e0): 0010a0e3  mov      r1, #0",
+        "0x5362e4d4 (pay 0x006461e4): 776409eb  bl       #0x538876b8",
+        "0x5362e4d8 (pay 0x006461e8): 18201be5  ldr      r2, [fp, #-0x18]",
+        "0x5362e4dc (pay 0x006461ec): 0510a0e1  mov      r1, r5",
+        "0x5362e4e0 (pay 0x006461f0): 0400a0e1  mov      r0, r4",
+        "0x5362e4e4 (pay 0x006461f4): c1ffffeb  bl       #0x5362e3f0",
+        "0x5362e4e8 (pay 0x006461f8): 7010efe6  uxtb     r1, r0",
+        "0x5362e4ec (pay 0x006461fc): 400094e5  ldr      r0, [r4, #0x40]",
+        "0x5362e4f0 (pay 0x00646200): 14d04be2  sub      sp, fp, #0x14",
+        "0x5362e4f4 (pay 0x00646204): 30689de8  ldm      sp, {r4, r5, fp, sp, lr}",
+        "0x5362e4f8 (pay 0x00646208): 126609ea  b        #0x53887d48",
+        "0x5362e4fc (pay 0x0064620c): 47f403eb  bl       #0x5372b620",
+        "0x5362e500 (pay 0x00646210): 040090e5  ldr      r0, [r0, #4]",
+        "0x5362e504 (pay 0x00646214): f7a704eb  bl       #0x537584e8",
+        "0x5362e508 (pay 0x00646218): 010050e3  cmp      r0, #1",
+        "0x5362e50c (pay 0x0064621c): 0050a0e1  mov      r5, r0",
+        "0x5362e510 (pay 0x00646220): d9ffff1a  bne      #0x5362e47c",
+        "0x5362e514 (pay 0x00646224): 44270ee3  movw     r2, #0xe744",
+        "0x5362e518 (pay 0x00646228): 0010a0e3  mov      r1, #0",
+        "0x5362e51c (pay 0x0064622c): ea2345e3  movt     r2, #0x53ea  ; 0x53eae744 -> \"[LVC] for Debug 4K Movie!\"",
+        "0x5362e520 (pay 0x00646230): 0130a0e1  mov      r3, r1",
+        "0x5362e524 (pay 0x00646234): 00208de5  str      r2, [sp]",
+        "0x5362e528 (pay 0x00646238): 0200a0e3  mov      r0, #2",
+        "0x5362e52c (pay 0x0064623c): 0520a0e3  mov      r2, #5",
+        "0x5362e530 (pay 0x00646240): c0f80aeb  bl       #0x538ec838",
+        "0x5362e534 (pay 0x00646244): 0530a0e1  mov      r3, r5",
+        "0x5362e538 (pay 0x00646248): d0ffffea  b        #0x5362e480",
+        "0x5362e53c (pay 0x0064624c): 00000046  strmi    r0, [r0], -r0",
+        "0x5362e540 (pay 0x00646250): 0dc0a0e1  mov      ip, sp",
+        "0x5362e544 (pay 0x00646254): 70d82de9  push     {r4, r5, r6, fp, ip, lr, pc}",
+        "0x5362e548 (pay 0x00646258): bc4904e3  movw     r4, #0x49bc",
+        "0x5362e54c (pay 0x0064625c): 354445e3  movt     r4, #0x5435  ; 0x543549bc",
+        "0x5362e550 (pay 0x00646260): 04b04ce2  sub      fp, ip, #4",
+        "0x5362e554 (pay 0x00646264): 24d04de2  sub      sp, sp, #0x24",
+        "0x5362e558 (pay 0x00646268): 003094e5  ldr      r3, [r4]",
+        "0x5362e55c (pay 0x0064626c): 7150ffe6  uxth     r5, r1",
+        "0x5362e560 (pay 0x00646270): 0060a0e1  mov      r6, r0",
+        "0x5362e564 (pay 0x00646274): 0010a0e3  mov      r1, #0",
+        "0x5362e568 (pay 0x00646278): 20300be5  str      r3, [fp, #-0x20]",
+        "0x5362e56c (pay 0x0064627c): 8fffffeb  bl       #0x5362e3b0"
+      ]
+    },
+    {
+      "id": "video_mode_3840x2160p_30hz",
+      "title": "Active 3840x2160p/30Hz Video Timing Descriptor Setup (@ 0x53055d00..0x53055da0)",
+      "start_vaddr": "0x53055d00",
+      "end_vaddr": "0x53055da0",
+      "disassembly": [
+        "0x53055d00 (pay 0x0006da10): cc5a22eb  bl       #0x538ec838",
+        "0x53055d04 (pay 0x0006da14): a43400e3  movw     r3, #0x4a4",
+        "0x53055d08 (pay 0x0006da18): 0000a0e3  mov      r0, #0",
+        "0x53055d0c (pay 0x0006da1c): 043445e3  movt     r3, #0x5404  ; 0x540404a4 -> \"5:1920x1080p/60Hz\"",
+        "0x53055d10 (pay 0x0006da20): 0010a0e1  mov      r1, r0",
+        "0x53055d14 (pay 0x0006da24): 00308de5  str      r3, [sp]",
+        "0x53055d18 (pay 0x0006da28): 0020a0e1  mov      r2, r0",
+        "0x53055d1c (pay 0x0006da2c): 0030a0e1  mov      r3, r0",
+        "0x53055d20 (pay 0x0006da30): c45a22eb  bl       #0x538ec838",
+        "0x53055d24 (pay 0x0006da34): b83400e3  movw     r3, #0x4b8",
+        "0x53055d28 (pay 0x0006da38): 0000a0e3  mov      r0, #0",
+        "0x53055d2c (pay 0x0006da3c): 043445e3  movt     r3, #0x5404  ; 0x540404b8 -> \"6:1920x1080p/50Hz\"",
+        "0x53055d30 (pay 0x0006da40): 0010a0e1  mov      r1, r0",
+        "0x53055d34 (pay 0x0006da44): 00308de5  str      r3, [sp]",
+        "0x53055d38 (pay 0x0006da48): 0020a0e1  mov      r2, r0",
+        "0x53055d3c (pay 0x0006da4c): 0030a0e1  mov      r3, r0",
+        "0x53055d40 (pay 0x0006da50): bc5a22eb  bl       #0x538ec838",
+        "0x53055d44 (pay 0x0006da54): cc3400e3  movw     r3, #0x4cc",
+        "0x53055d48 (pay 0x0006da58): 0000a0e3  mov      r0, #0",
+        "0x53055d4c (pay 0x0006da5c): 043445e3  movt     r3, #0x5404  ; 0x540404cc -> \"7:3840x2160p/30Hz\"",
+        "0x53055d50 (pay 0x0006da60): 0010a0e1  mov      r1, r0",
+        "0x53055d54 (pay 0x0006da64): 00308de5  str      r3, [sp]",
+        "0x53055d58 (pay 0x0006da68): 0020a0e1  mov      r2, r0",
+        "0x53055d5c (pay 0x0006da6c): 0030a0e1  mov      r3, r0",
+        "0x53055d60 (pay 0x0006da70): b45a22eb  bl       #0x538ec838",
+        "0x53055d64 (pay 0x0006da74): e03400e3  movw     r3, #0x4e0",
+        "0x53055d68 (pay 0x0006da78): 0000a0e3  mov      r0, #0",
+        "0x53055d6c (pay 0x0006da7c): 043445e3  movt     r3, #0x5404  ; 0x540404e0 -> \"Param 1\"",
+        "0x53055d70 (pay 0x0006da80): 0010a0e1  mov      r1, r0",
+        "0x53055d74 (pay 0x0006da84): 00308de5  str      r3, [sp]",
+        "0x53055d78 (pay 0x0006da88): 0020a0e1  mov      r2, r0",
+        "0x53055d7c (pay 0x0006da8c): 0030a0e1  mov      r3, r0",
+        "0x53055d80 (pay 0x0006da90): ac5a22eb  bl       #0x538ec838",
+        "0x53055d84 (pay 0x0006da94): e83400e3  movw     r3, #0x4e8",
+        "0x53055d88 (pay 0x0006da98): 0000a0e3  mov      r0, #0",
+        "0x53055d8c (pay 0x0006da9c): 043445e3  movt     r3, #0x5404  ; 0x540404e8 -> \"0:RGB\"",
+        "0x53055d90 (pay 0x0006daa0): 0010a0e1  mov      r1, r0",
+        "0x53055d94 (pay 0x0006daa4): 00308de5  str      r3, [sp]",
+        "0x53055d98 (pay 0x0006daa8): 0020a0e1  mov      r2, r0",
+        "0x53055d9c (pay 0x0006daac): 0030a0e1  mov      r3, r0"
+      ]
+    },
+    {
+      "id": "h265_wave_vdi_mm",
+      "title": "Active Chips&Media WAVE H.265 VDI Memory Manager (mm.c @ 0x5394da10..0x5394daa0)",
+      "start_vaddr": "0x5394da10",
+      "end_vaddr": "0x5394daa0",
+      "disassembly": [
+        "0x5394da10 (pay 0x00965720): 14d04be2  sub      sp, fp, #0x14",
+        "0x5394da14 (pay 0x00965724): 18689de8  ldm      sp, {r3, r4, fp, sp, lr}",
+        "0x5394da18 (pay 0x00965728): 1f4400ea  b        #0x5395ea9c",
+        "0x5394da1c (pay 0x0096572c): 180090e5  ldr      r0, [r0, #0x18]",
+        "0x5394da20 (pay 0x00965730): 7f4400ea  b        #0x5395ec24",
+        "0x5394da24 (pay 0x00965734): 180090e5  ldr      r0, [r0, #0x18]",
+        "0x5394da28 (pay 0x00965738): 324500ea  b        #0x5395eef8",
+        "0x5394da2c (pay 0x0096573c): 140090e5  ldr      r0, [r0, #0x14]",
+        "0x5394da30 (pay 0x00965740): 7110ffe6  uxth     r1, r1",
+        "0x5394da34 (pay 0x00965744): 0e3600ea  b        #0x5395b274",
+        "0x5394da38 (pay 0x00965748): 140090e5  ldr      r0, [r0, #0x14]",
+        "0x5394da3c (pay 0x0096574c): 7b3200ea  b        #0x5395a430",
+        "0x5394da40 (pay 0x00965750): 140090e5  ldr      r0, [r0, #0x14]",
+        "0x5394da44 (pay 0x00965754): 7e3100ea  b        #0x5395a044",
+        "0x5394da48 (pay 0x00965758): 140090e5  ldr      r0, [r0, #0x14]",
+        "0x5394da4c (pay 0x0096575c): 503200ea  b        #0x5395a394",
+        "0x5394da50 (pay 0x00965760): 0dc0a0e1  mov      ip, sp",
+        "0x5394da54 (pay 0x00965764): 30d82de9  push     {r4, r5, fp, ip, lr, pc}",
+        "0x5394da58 (pay 0x00965768): 0040a0e1  mov      r4, r0",
+        "0x5394da5c (pay 0x0096576c): 140090e5  ldr      r0, [r0, #0x14]",
+        "0x5394da60 (pay 0x00965770): 04b04ce2  sub      fp, ip, #4",
+        "0x5394da64 (pay 0x00965774): 0250a0e1  mov      r5, r2",
+        "0x5394da68 (pay 0x00965778): 7e3400eb  bl       #0x5395ac68",
+        "0x5394da6c (pay 0x0096577c): 140094e5  ldr      r0, [r4, #0x14]",
+        "0x5394da70 (pay 0x00965780): 0510a0e1  mov      r1, r5",
+        "0x5394da74 (pay 0x00965784): 14d04be2  sub      sp, fp, #0x14",
+        "0x5394da78 (pay 0x00965788): 30689de8  ldm      sp, {r4, r5, fp, sp, lr}",
+        "0x5394da7c (pay 0x0096578c): 933400ea  b        #0x5395acd0",
+        "0x5394da80 (pay 0x00965790): 140090e5  ldr      r0, [r0, #0x14]",
+        "0x5394da84 (pay 0x00965794): 873300ea  b        #0x5395a8a8",
+        "0x5394da88 (pay 0x00965798): 0030d1e5  ldrb     r3, [r1]",
+        "0x5394da8c (pay 0x0096579c): 0dc0a0e1  mov      ip, sp",
+        "0x5394da90 (pay 0x009657a0): 30d82de9  push     {r4, r5, fp, ip, lr, pc}",
+        "0x5394da94 (pay 0x009657a4): 0040a0e1  mov      r4, r0",
+        "0x5394da98 (pay 0x009657a8): 2b20d1e5  ldrb     r2, [r1, #0x2b]",
+        "0x5394da9c (pay 0x009657ac): 0150a0e1  mov      r5, r1"
+      ]
+    },
+    {
+      "id": "fj_video_encoder_gc_boundary",
+      "title": "Linker --gc-sections Boundary Skipping FJ_VideoEncoder_Setup (.text @ 0x53a93440..0x53a93520)",
+      "start_vaddr": "0x53a93440",
+      "end_vaddr": "0x53a93520",
+      "disassembly": [
+        "0x53a93440 (pay 0x00aab150): c8000ee3  movw     r0, #0xe0c8",
+        "0x53a93444 (pay 0x00aab154): 350445e3  movt     r0, #0x5435  ; 0x5435e0c8",
+        "0x53a93448 (pay 0x00aab158): 14d04be2  sub      sp, fp, #0x14",
+        "0x53a9344c (pay 0x00aab15c): 18689de8  ldm      sp, {r3, r4, fp, sp, lr}",
+        "0x53a93450 (pay 0x00aab160): 590200ea  b        #0x53a93dbc",
+        "0x53a93454 (pay 0x00aab164): 054545e3  movt     r4, #0x5505",
+        "0x53a93458 (pay 0x00aab168): 24010ee3  movw     r0, #0xe124",
+        "0x53a9345c (pay 0x00aab16c): 350445e3  movt     r0, #0x5435  ; 0x5435e124",
+        "0x53a93460 (pay 0x00aab170): 001094e5  ldr      r1, [r4]",
+        "0x53a93464 (pay 0x00aab174): 540200eb  bl       #0x53a93dbc",
+        "0x53a93468 (pay 0x00aab178): ebffffea  b        #0x53a9341c",
+        "0x53a9346c (pay 0x00aab17c): 0dc0a0e1  mov      ip, sp",
+        "0x53a93470 (pay 0x00aab180): 18d82de9  push     {r3, r4, fp, ip, lr, pc}",
+        "0x53a93474 (pay 0x00aab184): f43a06e3  movw     r3, #0x6af4",
+        "0x53a93478 (pay 0x00aab188): 0248a0e3  mov      r4, #0x20000",
+        "0x53a9347c (pay 0x00aab18c): 053545e3  movt     r3, #0x5505  ; 0x55056af4",
+        "0x53a93480 (pay 0x00aab190): 0400a0e1  mov      r0, r4",
+        "0x53a93484 (pay 0x00aab194): 04b04ce2  sub      fp, ip, #4",
+        "0x53a93488 (pay 0x00aab198): 004083e5  str      r4, [r3]",
+        "0x53a9348c (pay 0x00aab19c): 240200eb  bl       #0x53a93d24",
+        "0x53a93490 (pay 0x00aab1a0): 0400a0e1  mov      r0, r4",
+        "0x53a93494 (pay 0x00aab1a4): 550400eb  bl       #0x53a945f0",
+        "0x53a93498 (pay 0x00aab1a8): 004050e2  subs     r4, r0, #0",
+        "0x53a9349c (pay 0x00aab1ac): 0000001a  bne      #0x53a934a4",
+        "0x53a934a0 (pay 0x00aab1b0): d5ffffeb  bl       #0x53a933fc",
+        "0x53a934a4 (pay 0x00aab1b4): 140f6fe1  clz      r0, r4",
+        "0x53a934a8 (pay 0x00aab1b8): a002a0e1  lsr      r0, r0, #5",
+        "0x53a934ac (pay 0x00aab1bc): 18a89de8  ldm      sp, {r3, r4, fp, sp, pc}",
+        "0x53a934b0 (pay 0x00aab1c0): 0dc0a0e1  mov      ip, sp",
+        "0x53a934b4 (pay 0x00aab1c4): f0d92de9  push     {r4, r5, r6, r7, r8, fp, ip, lr, pc}",
+        "0x53a934b8 (pay 0x00aab1c8): bc4904e3  movw     r4, #0x49bc",
+        "0x53a934bc (pay 0x00aab1cc): 354445e3  movt     r4, #0x5435  ; 0x543549bc",
+        "0x53a934c0 (pay 0x00aab1d0): 04b04ce2  sub      fp, ip, #4",
+        "0x53a934c4 (pay 0x00aab1d4): e8c307e3  movw     ip, #0x73e8",
+        "0x53a934c8 (pay 0x00aab1d8): 0cd04de2  sub      sp, sp, #0xc",
+        "0x53a934cc (pay 0x00aab1dc): 0150a0e1  mov      r5, r1",
+        "0x53a934d0 (pay 0x00aab1e0): 00e094e5  ldr      lr, [r4]",
+        "0x53a934d4 (pay 0x00aab1e4): 0260a0e1  mov      r6, r2",
+        "0x53a934d8 (pay 0x00aab1e8): 3bc545e3  movt     ip, #0x553b  ; 0x553b73e8",
+        "0x53a934dc (pay 0x00aab1ec): 0110a0e3  mov      r1, #1",
+        "0x53a934e0 (pay 0x00aab1f0): 28e00be5  str      lr, [fp, #-0x28]",
+        "0x53a934e4 (pay 0x00aab1f4): 0120dce7  ldrb     r2, [ip, r1]",
+        "0x53a934e8 (pay 0x00aab1f8): 71e0efe6  uxtb     lr, r1",
+        "0x53a934ec (pay 0x00aab1fc): 020050e1  cmp      r0, r2",
+        "0x53a934f0 (pay 0x00aab200): 0b00000a  beq      #0x53a93524",
+        "0x53a934f4 (pay 0x00aab204): 011081e2  add      r1, r1, #1",
+        "0x53a934f8 (pay 0x00aab208): 100051e3  cmp      r1, #0x10",
+        "0x53a934fc (pay 0x00aab20c): f8ffff1a  bne      #0x53a934e4",
+        "0x53a93500 (pay 0x00aab210): 10030fe3  movw     r0, #0xf310",
+        "0x53a93504 (pay 0x00aab214): 350445e3  movt     r0, #0x5435  ; 0x5435f310",
+        "0x53a93508 (pay 0x00aab218): a85c00eb  bl       #0x53aaa7b0",
+        "0x53a9350c (pay 0x00aab21c): 28201be5  ldr      r2, [fp, #-0x28]",
+        "0x53a93510 (pay 0x00aab220): 003094e5  ldr      r3, [r4]",
+        "0x53a93514 (pay 0x00aab224): 030052e1  cmp      r2, r3",
+        "0x53a93518 (pay 0x00aab228): 6600001a  bne      #0x53a936b8",
+        "0x53a9351c (pay 0x00aab22c): 20d04be2  sub      sp, fp, #0x20"
+      ]
+    }
+  ]
+}

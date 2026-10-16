@@ -1,0 +1,31 @@
+# Large firmware binaries & unpacked partitions (shared across worktrees)
+firmware/official/
+firmware/unpacked/
+firmware/build/
+output/
+*.bin
+*.squashfs
+*.img
+*.zip
+
+# Keep tracked small binary assets (e.g. ICC profiles)
+!assets/icc/*.icc
+
+# Git worktrees directory
+worktrees/
+
+# Python cache & virtual environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.env
+
+# OS & Editor files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
