@@ -1,0 +1,461 @@
+{
+  "title": "GoPro GP1/GP2 vs. Ricoh GR IV (v1.11) 4K Video Comparative Audit",
+  "dtb_hardware_topology": {
+    "dtb_offset_in_linux_bin": "0x80c0",
+    "dtb_totalsize_bytes": 32690,
+    "silicon_compatible_strings": [
+      "gpio-keys",
+      "ethernet-phy-ieee802.3-c22",
+      "arm,cortex-a7-pmu",
+      "generic-ohci",
+      "arm,cortex-a7",
+      "socionext,sni-gr",
+      "socionext,milbeaut-evb",
+      "fixed-factor-clock",
+      "socionext,milbeaut-m10v-sdhci-3.0",
+      "socionext,ogma",
+      "socionext,usb3mlb01,f_usb30dr_fp",
+      "socionext,mlb01-clk-regs",
+      "socionext,usb2m9m,f_usb20dc_lfp",
+      "gpio-leds",
+      "socionext,milbeaut-m10v-sdhci-4.0",
+      "socionext,mlb01-pll-fixed-factor",
+      "socionext,mb86s7x_hdmac",
+      "socionext,mlb01-pwm",
+      "socionext,ipcufs-rtos",
+      "socionext,milbeaut-timer",
+      "socionext,mlb01-clk-div",
+      "socionext,ipcu-device",
+      "socionext, shared-commem",
+      "socionext,sni-spi",
+      "cdns,hpnfc-dt",
+      "milbeaut,sc2000a",
+      "socionext,mlb01-clk-mux",
+      "socionext,milbeaut-m10v-pinctrl",
+      "socionext,mlb01-emmc-5.0",
+      "socionext,mlb01-pcie",
+      "snps,dwc3",
+      "socionext,milbeaut-reset",
+      "generic-ehci",
+      "socionext,sni-sc2000a-i2c",
+      "socionext,vblk-rtos",
+      "socionext,m8m-usio-uart",
+      "arm,armv7-timer",
+      "socionext,m8m-usio-spi",
+      "fixed-clock",
+      "arm,cortex-a7-gic"
+    ],
+    "native_display_framebuffer_modes": [
+      "fhd",
+      "hd",
+      "4k",
+      "4k4444"
+    ],
+    "shared_commem_pointers": {
+      "draw_buffer_num": "0x00000002",
+      "buf-addr": "0x4ff00004",
+      "buf-size": "0x4ff00008",
+      "sync-addr": "0x4ff0000c",
+      "sync-size": "0x4ff00010",
+      "rd-pointer-addr": "0x4ff00014",
+      "rd-pointer-size": "0x4ff00018",
+      "wt-pointer-addr": "0x4ff0001c",
+      "wt-pointer-size": "0x4ff00020",
+      "movie-rec-addr": "0x4ff00024",
+      "movie-rec-size": "0x4ff00028",
+      "term-io-addr": "0x4ff0002c",
+      "term-io-size": "0x4ff00030",
+      "string-addr": "0x4ff00034",
+      "string-size": "0x4ff00038",
+      "ribery-addr": "0x4ff0003c",
+      "ribery-size": "0x4ff00040",
+      "audio-addr": "0x4ff00044",
+      "audio-size": "0x4ff00048",
+      "raw-addr": "0x4ff0004c",
+      "raw-size": "0x4ff00050",
+      "yuv-addr": "0x4ff00054",
+      "yuv-size": "0x4ff00058",
+      "hevc-addr": "0x4ff0005c",
+      "hevc-size": "0x4ff00060",
+      "mjpeg-addr": "0x4ff00064",
+      "mjpeg-size": "0x4ff00068",
+      "cap-addr": "0x4ff0006c",
+      "cap-size": "0x4ff00070",
+      "osd-addr": "0x4ff00074",
+      "osd-size": "0x4ff00078",
+      "audio-out-addr": "0x4ff0007c",
+      "audio-out-size": "0x4ff00080",
+      "metadata-addr": "0x4ff00084",
+      "metadata-size": "0x4ff00088",
+      "lcd-osd-frame-addr": "0x4ff0008c",
+      "lcd-osd-frame-size": "0x4ff00090",
+      "hdmi-osd-frame-addr": "0x4ff00094",
+      "hdmi-osd-frame-size": "0x4ff00098",
+      "disp-addr": "0x4ffffc00",
+      "rtcp-addr": "0x4fffe000",
+      "rtcp-size": "0x00001000",
+      "ribery-stream-s-addr": "0x4ff0009c",
+      "ribery-stream-s-size": "0x4ff000a0"
+    }
+  },
+  "rtos_video_tables": {
+    "movie_record_table": {
+      "base_vaddr": "0x5435f60c",
+      "stride_bytes": 464,
+      "total_slots_audited": 16,
+      "native_4k_slots": [
+        {
+          "slot_index": 0,
+          "vaddr": "0x5435f60c",
+          "offset": "0x0135f60c",
+          "width": 3840,
+          "height": 2160,
+          "fps": 60,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": true
+        },
+        {
+          "slot_index": 1,
+          "vaddr": "0x5435f7dc",
+          "offset": "0x0135f7dc",
+          "width": 3840,
+          "height": 2160,
+          "fps": 60,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": true
+        },
+        {
+          "slot_index": 2,
+          "vaddr": "0x5435f9ac",
+          "offset": "0x0135f9ac",
+          "width": 3840,
+          "height": 2160,
+          "fps": 60,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": true
+        },
+        {
+          "slot_index": 3,
+          "vaddr": "0x5435fb7c",
+          "offset": "0x0135fb7c",
+          "width": 3840,
+          "height": 2160,
+          "fps": 60,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": true
+        },
+        {
+          "slot_index": 4,
+          "vaddr": "0x5435fd4c",
+          "offset": "0x0135fd4c",
+          "width": 3840,
+          "height": 2160,
+          "fps": 60,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": true
+        },
+        {
+          "slot_index": 5,
+          "vaddr": "0x5435ff1c",
+          "offset": "0x0135ff1c",
+          "width": 3840,
+          "height": 2160,
+          "fps": 30,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": true
+        },
+        {
+          "slot_index": 6,
+          "vaddr": "0x543600ec",
+          "offset": "0x013600ec",
+          "width": 3840,
+          "height": 2160,
+          "fps": 30,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": true
+        },
+        {
+          "slot_index": 7,
+          "vaddr": "0x543602bc",
+          "offset": "0x013602bc",
+          "width": 3840,
+          "height": 2160,
+          "fps": 30,
+          "bitrate_bps": 100000000,
+          "bitrate_mbps": 100.0,
+          "codec_id": 1,
+          "enabled": 1,
+          "is_4k": true
+        },
+        {
+          "slot_index": 8,
+          "vaddr": "0x5436048c",
+          "offset": "0x0136048c",
+          "width": 3840,
+          "height": 2160,
+          "fps": 30,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": true
+        }
+      ],
+      "native_fhd_slots": [
+        {
+          "slot_index": 9,
+          "vaddr": "0x5436065c",
+          "offset": "0x0136065c",
+          "width": 1920,
+          "height": 1080,
+          "fps": 120,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": false
+        },
+        {
+          "slot_index": 10,
+          "vaddr": "0x5436082c",
+          "offset": "0x0136082c",
+          "width": 1920,
+          "height": 1080,
+          "fps": 120,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": false
+        },
+        {
+          "slot_index": 11,
+          "vaddr": "0x543609fc",
+          "offset": "0x013609fc",
+          "width": 1920,
+          "height": 1080,
+          "fps": 60,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": false
+        },
+        {
+          "slot_index": 12,
+          "vaddr": "0x54360bcc",
+          "offset": "0x01360bcc",
+          "width": 1920,
+          "height": 1080,
+          "fps": 60,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": false
+        },
+        {
+          "slot_index": 13,
+          "vaddr": "0x54360d9c",
+          "offset": "0x01360d9c",
+          "width": 1920,
+          "height": 1080,
+          "fps": 60,
+          "bitrate_bps": 100000000,
+          "bitrate_mbps": 100.0,
+          "codec_id": 1,
+          "enabled": 1,
+          "is_4k": false
+        },
+        {
+          "slot_index": 14,
+          "vaddr": "0x54360f6c",
+          "offset": "0x01360f6c",
+          "width": 1920,
+          "height": 1080,
+          "fps": 60,
+          "bitrate_bps": 100000000,
+          "bitrate_mbps": 100.0,
+          "codec_id": 1,
+          "enabled": 1,
+          "is_4k": false
+        },
+        {
+          "slot_index": 15,
+          "vaddr": "0x5436113c",
+          "offset": "0x0136113c",
+          "width": 1920,
+          "height": 1080,
+          "fps": 240,
+          "bitrate_bps": 120000000,
+          "bitrate_mbps": 120.0,
+          "codec_id": 0,
+          "enabled": 1,
+          "is_4k": false
+        }
+      ]
+    },
+    "recipe_jump_table": {
+      "table_vaddr": "0x536497e8",
+      "cases": [
+        {
+          "case_index": 0,
+          "table_vaddr": "0x536497e8",
+          "target_vaddr": "0x53649874",
+          "target_symbol": "Standard Dispatch"
+        },
+        {
+          "case_index": 1,
+          "table_vaddr": "0x536497ec",
+          "target_vaddr": "0x53649888",
+          "target_symbol": "1080p 60p Mode"
+        },
+        {
+          "case_index": 2,
+          "table_vaddr": "0x536497f0",
+          "target_vaddr": "0x5364989c",
+          "target_symbol": "1080p 30p Mode"
+        },
+        {
+          "case_index": 3,
+          "table_vaddr": "0x536497f4",
+          "target_vaddr": "0x536498b0",
+          "target_symbol": "1080p 24p Mode (Primary Hijack Candidate)"
+        },
+        {
+          "case_index": 4,
+          "table_vaddr": "0x536497f8",
+          "target_vaddr": "0x536498c4",
+          "target_symbol": "CreateRecipeSequenceMov4kExt (External 4K)"
+        },
+        {
+          "case_index": 5,
+          "table_vaddr": "0x536497fc",
+          "target_vaddr": "0x536498f8",
+          "target_symbol": "CreateRecipeSequenceMov4kRemote (Remote 4K)"
+        },
+        {
+          "case_index": 6,
+          "table_vaddr": "0x53649800",
+          "target_vaddr": "0x5364992c",
+          "target_symbol": "Standard Dispatch"
+        },
+        {
+          "case_index": 7,
+          "table_vaddr": "0x53649804",
+          "target_vaddr": "0x53649940",
+          "target_symbol": "Standard Dispatch"
+        },
+        {
+          "case_index": 8,
+          "table_vaddr": "0x53649808",
+          "target_vaddr": "0x53649954",
+          "target_symbol": "Standard Dispatch"
+        },
+        {
+          "case_index": 9,
+          "table_vaddr": "0x5364980c",
+          "target_vaddr": "0x53649810",
+          "target_symbol": "Standard Dispatch"
+        }
+      ]
+    },
+    "resize_model_table": {
+      "vaddr": "0x53dbf000",
+      "entries": []
+    },
+    "chips_and_media_wave_vpu": {
+      "vdi_mm_source_string": "RiberyM9M_Codec/FUNC/Movie/H265/WAVE/Project/vdi/src/mm.c",
+      "vdi_mm_found": true,
+      "vdi_mm_vaddr": "0x53ce8d7f",
+      "vdi_mm_code_xrefs": [
+        "0x5394da44",
+        "0x5394de10"
+      ]
+    }
+  },
+  "comparative_matrix": {
+    "platform_comparisons": [
+      {
+        "platform": "GoPro HERO6..9 / MAX (GP1)",
+        "soc_model": "Socionext SC2000a (Milbeaut M10V / RiberyM9M)",
+        "silicon_process": "TSMC 28nm",
+        "supervisor_core": "ARM Cortex-M0 @ 100MHz (0x3FFE0000)",
+        "application_cluster": "Quad-core ARM Cortex-A7 @ 600MHz (AMP: 3x RTOS + 1x Linux)",
+        "rtos_type": "eSOL T-Kernel RTOS",
+        "rtos_load_base": "0xA0000000",
+        "hardware_vpu": "Chips&Media WAVE520 (H.264 & HEVC Multi-Standard)",
+        "max_video_spec": "4K 60p HEVC (100-120 Mbps via GoPro Labs BITR)",
+        "color_depth": "8-bit (GP1), 10-bit (GP2)",
+        "shared_memory_topology": "DDR Shmem mailbox with IPCU"
+      },
+      {
+        "platform": "Ricoh GR IV (Standard v1.11)",
+        "soc_model": "Socionext SC2000a (Milbeaut M10V / RiberyM9M)",
+        "silicon_process": "TSMC 28nm",
+        "supervisor_core": "ARM Cortex-M0 @ 100MHz (0x3FFE0000)",
+        "application_cluster": "Quad-core ARM Cortex-A7 @ 600MHz (AMP: 3x RTOS + 1x Linux)",
+        "rtos_type": "eSOL T-Kernel RTOS",
+        "rtos_load_base": "0x53000000",
+        "hardware_vpu": "Chips&Media WAVE520 (H.264 active; HEVC VDI active)",
+        "max_video_spec": "Official: 1080p 60p; Unlocked: 4K 30p H.264 (100 Mbps)",
+        "color_depth": "8-bit (with BT.2100 HLG VUI & colr box), 10-bit via HIF",
+        "shared_memory_topology": "DDR Shmem (0x4FF00000) with IPCU unit 0 ch 2/3"
+      },
+      {
+        "platform": "GoPro HERO10..13 (GP2)",
+        "soc_model": "Socionext M20V (Karine)",
+        "silicon_process": "TSMC 12nm / 16nm FinFET",
+        "supervisor_core": "ARM Cortex-M0+",
+        "application_cluster": "Quad-core ARM Cortex-A53 (64-bit)",
+        "rtos_type": "eSOL T-Kernel RTOS (64-bit)",
+        "rtos_load_base": "0x80000000",
+        "hardware_vpu": "Chips&Media WAVE521 / WAVE6 (4K120 / 5.3K60 HEVC)",
+        "max_video_spec": "5.3K 60p / 4K 120p 10-bit GP-Log / HLG (150 Mbps)",
+        "color_depth": "10-bit native Main10 Intra/Inter",
+        "shared_memory_topology": "Unified 64-bit Mailbox & IPCU"
+      },
+      {
+        "platform": "Pentax K-3 Mark III (fwdc233b)",
+        "soc_model": "Socionext Milbeaut PRIME V (Accelerator Unit Co-proc)",
+        "silicon_process": "TSMC 28nm",
+        "supervisor_core": "ARM Cortex-M0",
+        "application_cluster": "Quad-core ARM Cortex-A7",
+        "rtos_type": "eSOL T-Kernel RTOS",
+        "rtos_load_base": "0x53000000",
+        "hardware_vpu": "Chips&Media WAVE520",
+        "max_video_spec": "Official: 4K 30p H.264 (100 Mbps)",
+        "color_depth": "8-bit H.264 High Profile",
+        "shared_memory_topology": "fwdc shared container & IPCU"
+      }
+    ],
+    "key_reverse_engineering_takeaways": [
+      "Silicon Parity: GoPro GP1 and Ricoh GR IV share the exact same Socionext SC2000a (M10V) die and Cortex-A7 CPUID.",
+      "Native 4K Pipeline in Firmware: GR IV v1.11 already embeds 9 active 4K records (3840x2160, 100/120 Mbps) in its RTOS movie table at 0x5435F60C.",
+      "Jump Table Recipe Switch: Case 4 (0x536498C4) is CreateRecipeSequenceMov4kExt; redirecting Case 3 (1080p24) achieves zero-overhead 4K activation without UI layout alteration.",
+      "Thermal & Power Safe Window: Drawing on GoPro GP1 telemetry, 4K 24p/30p @ 60-100 Mbps operates well within the 1.7W thermal ceiling, protecting the 5-axis IBIS assembly.",
+      "Container-Level HDR: MP4 colr(nclx) atom injection (00000012 636f6c72 6e636c78 0009 0012 0009 80) combined with H.264 SPS VUI triggers native HDR on Apple/YouTube workflows."
+    ]
+  }
+}

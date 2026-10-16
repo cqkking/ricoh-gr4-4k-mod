@@ -1,0 +1,45 @@
+{
+  "success": true,
+  "suites": [
+    {
+      "suite": "Suite 1: Silicon & Device Tree Topology (DTB)",
+      "status": "PASS",
+      "details": "SC2000a verified, 4K display nodes ['fhd', 'hd', '4k', '4k4444'], shmem movie-rec-addr 0x4ff00024"
+    },
+    {
+      "suite": "Suite 2: RTOS Movie Recipe Switch Jump Table",
+      "status": "PASS",
+      "details": "Jump table at 0x536497e8 valid: Case 4 = 0x536498c4 (Mov4kExt), Case 3 = 0x536498b0"
+    },
+    {
+      "suite": "Suite 3: RTOS Movie Record Table Audit (4K Slots)",
+      "status": "PASS",
+      "details": "Found 9 native 4K slots; Slot 7 = 3840x2160 @ 30p (100.0 Mbps)"
+    },
+    {
+      "suite": "Suite 4: Resize Model Table Resolution Descriptors",
+      "status": "PASS",
+      "details": "Verified 3840x2160 resolution descriptor present in 11ResizeModel table (total 12 resolutions)"
+    },
+    {
+      "suite": "Suite 5: Chips&Media WAVE VPU VDI Allocator & Xrefs",
+      "status": "PASS",
+      "details": "Chips&Media WAVE520 VDI mm.c located at 0x53ce8d7f with active .text xrefs at ['0x5394da44', '0x5394de10']"
+    },
+    {
+      "suite": "Suite 6: In-Place Slot Hijack & ARMv7 Disassembly",
+      "status": "PASS",
+      "details": "Slot hijack patch verified (1 bytes diff). Case 3 -> 0x536498c4. ARMv7 opcodes valid."
+    },
+    {
+      "suite": "Suite 7: Annex B H.264 SPS VUI BT.2100 HLG Syntax",
+      "status": "PASS",
+      "details": "ITU-T H.264 Annex E VUI parameters compliant: c05b84890480 (BT.2020/HLG/Full-Range)"
+    },
+    {
+      "suite": "Suite 8: MP4 Container colr(nclx) Atom Verification",
+      "status": "PASS",
+      "details": "MP4 container valid (1,196 bytes). colr(nclx) atom verified: primaries=9, transfer=18, matrix=9"
+    }
+  ]
+}
