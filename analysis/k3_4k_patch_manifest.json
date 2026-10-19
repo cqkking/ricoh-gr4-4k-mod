@@ -27,11 +27,20 @@
       "length": 52
     },
     {
-      "id": "slot3_hijack_to_4k",
-      "description": "Redirect Movie Jump Table Case 3 (24p) to 4K Ext (0x536498c4)",
+      "id": "slot3_hijack_to_4k_24p",
+      "description": "Redirect Movie Jump Table Case 3 (24p) to 4K Ext (0x536498c4) -> 4K 24P",
       "vaddr": "0x536497f4",
       "offset": "0x661504",
       "expected_hex": "b0986453",
+      "replacement_hex": "c4986453",
+      "length": 4
+    },
+    {
+      "id": "slot2_hijack_to_4k_30p",
+      "description": "Redirect Movie Jump Table Case 2 (30p) to 4K Ext (0x536498c4) -> 4K 30P",
+      "vaddr": "0x536497f0",
+      "offset": "0x661500",
+      "expected_hex": "9c986453",
       "replacement_hex": "c4986453",
       "length": 4
     },

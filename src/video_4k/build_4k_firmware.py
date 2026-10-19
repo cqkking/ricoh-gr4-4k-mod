@@ -76,18 +76,33 @@ def generate_patch_spec(official_payload: bytes) -> dict:
         "length": 52
     })
 
-    # 3. In-place Slot Hijack: Case 3 (1080p 24p @ 0x536497f4) -> Case 4 (0x536498c4)
+    # 3a. In-place Slot Hijack: Case 3 (1080p 24p @ 0x536497f4) -> Case 4 (0x536498c4)
     slot_va = 0x536497f4
     slot_poff = v2p(slot_va)
     slot_exp = official_payload[slot_poff : slot_poff + 4]
     slot_repl = struct.pack("<I", 0x536498c4)
     changes.append({
-        "id": "slot3_hijack_to_4k",
-        "description": "Redirect Movie Jump Table Case 3 (24p) to 4K Ext (0x536498c4)",
+        "id": "slot3_hijack_to_4k_24p",
+        "description": "Redirect Movie Jump Table Case 3 (24p) to 4K Ext (0x536498c4) -> 4K 24P",
         "vaddr": hex(slot_va),
         "offset": hex(slot_poff),
         "expected_hex": slot_exp.hex(),
         "replacement_hex": slot_repl.hex(),
+        "length": 4
+    })
+
+    # 3b. In-place Slot Hijack: Case 2 (1080p 30p @ 0x536497f0) -> Case 4 (0x536498c4)
+    slot2_va = 0x536497f0
+    slot2_poff = v2p(slot2_va)
+    slot2_exp = official_payload[slot2_poff : slot2_poff + 4]
+    slot2_repl = struct.pack("<I", 0x536498c4)
+    changes.append({
+        "id": "slot2_hijack_to_4k_30p",
+        "description": "Redirect Movie Jump Table Case 2 (30p) to 4K Ext (0x536498c4) -> 4K 30P",
+        "vaddr": hex(slot2_va),
+        "offset": hex(slot2_poff),
+        "expected_hex": slot2_exp.hex(),
+        "replacement_hex": slot2_repl.hex(),
         "length": 4
     })
 
