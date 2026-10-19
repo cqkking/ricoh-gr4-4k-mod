@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "name": "Ricoh GR IV v1.11 4K UHD Video Recording (Pentax K-3 III Port)",
+  "target": {
+    "model": "GR IV Standard Edition",
+    "firmware_version": "1.11",
+    "official_sha256": "c4e597c7c9ca1bc181b30e35139ed90a4fd876ddcca14f12be0e00b6702233ae",
+    "payload_bytes": 67948280
+  },
+  "changes": [
+    {
+      "id": "k3_plan4_recipe_cave",
+      "description": "Pentax K-3 III Plan 4 4K Recipe Sequence + Return Bridge",
+      "vaddr": "0x53000e00",
+      "offset": "0x18b10",
+      "expected_hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "replacement_hex": "1420a0e30030a0e3f839c4e5042040e32c2084e50110a0e3f439c4e50222a0e3f539c4e520e0a0e30a3ac4e580c0a0e3fc39c4e50200a0e3383ac4e5099da0e30c1084e50131a0e3102084e5011ca0e31c2084e5282084e5342084e514e084e518c084e5200084e5249084e5301084e5383084e5445901e3eb5345e36f2219ea",
+      "length": 128
+    },
+    {
+      "id": "plan4_stub_trampoline",
+      "description": "Trampoline branch from Plan 4 stub to 4K recipe cave",
+      "vaddr": "0x536498c4",
+      "offset": "0x6615d4",
+      "expected_hex": "d03801e3201806e3eb3345e3782800e300308de5fd1345e3eb2345e30000a0e3493fa0e3445901e30f900aebeb5345e3d1ffffea",
+      "replacement_hex": "4ddde6ea0000a0e10000a0e10000a0e10000a0e10000a0e10000a0e10000a0e10000a0e10000a0e10000a0e10000a0e10000a0e1",
+      "length": 52
+    },
+    {
+      "id": "slot3_hijack_to_4k",
+      "description": "Redirect Movie Jump Table Case 3 (24p) to 4K Ext (0x536498c4)",
+      "vaddr": "0x536497f4",
+      "offset": "0x661504",
+      "expected_hex": "b0986453",
+      "replacement_hex": "c4986453",
+      "length": 4
+    },
+    {
+      "id": "liveview_kb588_res_3840x2160",
+      "description": "LiveView Kb588 Video Resolution 3840x2160",
+      "vaddr": "0x5387f68c",
+      "offset": "0x89739c",
+      "expected_hex": "1e0da0e3113da0e3",
+      "replacement_hex": "000f00e3703800e3",
+      "length": 8
+    },
+    {
+      "id": "liveview_kb636_res_3840x2160",
+      "description": "LiveView Kb636 Video Resolution 3840x2160",
+      "vaddr": "0x5388176c",
+      "offset": "0x89947c",
+      "expected_hex": "1e0da0e3113da0e3",
+      "replacement_hex": "000f00e3703800e3",
+      "length": 8
+    },
+    {
+      "id": "movie_res_slot2_3840x2160",
+      "description": "Movie Recording Resolution Descriptor (Slot 2 = 24p) 3840x2160",
+      "vaddr": "0x5404358c",
+      "offset": "0x105b29c",
+      "expected_hex": "80073804",
+      "replacement_hex": "000f7008",
+      "length": 4
+    },
+    {
+      "id": "resizemodel_res_3840x2160",
+      "description": "ResizeModel 1080p slot dimensions to 3840x2160",
+      "vaddr": "0x53dbf08c",
+      "offset": "0xdd6d9c",
+      "expected_hex": "8007000038040000",
+      "replacement_hex": "000f000070080000",
+      "length": 8
+    }
+  ]
+}
