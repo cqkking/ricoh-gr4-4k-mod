@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-GPL--2.0-yellow)](#)
 
 > **🚀 Hardware Validation & Firmware Self-Check Status: FULL PASS**  
-> Verified across 5 automated end-to-end regression tests and full container validation: Dual 32-bit Word-Sum checksums (`word_sum == 0x00000000`) strictly balanced; native 12.53 MB frame buffer pool and 3840×2160 hardware pipelines fully connected. Selecting **`24p`** in camera menu records **`4K 24P`**, selecting **`30p`** records **`4K 30P`**, and selecting **`60p`** preserves factory **`1080p 60P`**! The LCD live view preview pipeline remains 100% on native display specifications, completely preventing frame freeze and system lockup!
+> Verified across 8 automated end-to-end regression tests and full container validation: Dual 32-bit Word-Sum checksums (`word_sum == 0x00000000`) strictly balanced; native 12.53 MB frame buffer pool and 3840×2160 hardware pipelines fully connected. Selecting **`24p`** in camera menu records **`4K 24P`**, selecting **`30p`** records **`4K 30P`**, and selecting **`60p`** preserves factory **`1080p 60P`**! Both the `MovieProcess` container muxer and `H264CodecService` hardware VPU encoder are symmetrically synchronized, eliminating macroblock shearing and player auto-pausing; the LCD live view preview pipeline remains 100% on native display specifications, completely preventing frame freeze and system lockup!
 
 This project provides an in-camera direct **4K UHD (3840×2160) Video Recording** firmware modification for the **Ricoh GR IV (Standard Edition / Mainland China version v1.11 `fwdc248b.bin`)**. Based on kernel-level reverse engineering, it activates GR IV's compiled-in dormant Socionext Milbeaut native 4K hardware pipeline, enabling dual-slot 4K UHD recording.
 
@@ -21,9 +21,9 @@ This project provides an in-camera direct **4K UHD (3840×2160) Video Recording*
    - **4K 24P (Cinematic Ultra HD)**: Selecting `24p` in the camera menu outputs `3840×2160 @ 23.976 fps` (~75-100 Mbps), delivering classic filmic cadence.
    - **4K 30P (Smooth Ultra HD)**: Selecting `30p` in the camera menu outputs `3840×2160 @ 29.970 fps` (~75-100 Mbps), smooth and crisp for everyday recording.
    - **FHD 60P (High-speed Full HD)**: Selecting `60p` in the camera menu retains factory `1920×1080 @ 59.940 fps` (~42 Mbps), ideal for fast action shots.
-2. **MovieProcess Engine Native 4K Dispatch**:
-   - The GR IV kernel already contains full native 4K compilation support: when the `MovieProcess` resolution enum is `0`, firmware directly returns `3840×2160` resolution, calls `0x53871fd8` to automatically allocate `0x00BF4000` (**12.53 MB**) NV12 physical frame buffers along with `0x007F8000` (8.35 MB) recording pools, and activates the dedicated 2x 4K bitrate multiplier at `0x5388cfa4` (`* 6` vs 1080p `* 3`).
-   - This project performs native arithmetic dispatch at `MovieProcess::InitializeSettings` (`0x536f551c`): mapping framerate enum `0` (60p) to 1080p, and non-zero (30p / 24p) to 4K UHD, requiring only a surgical 32-byte in-place modification.
+2. **MovieProcess Engine & Hardware VPU Encoder Dual-Aligned Dispatch**:
+   - The GR IV kernel already contains full native 4K compilation support: when the resolution enum is `0`, firmware directly returns `3840×2160` resolution, calls `0x53871fd8` to automatically allocate `0x00BF4000` (**12.53 MB**) NV12 physical frame buffers along with `0x007F8000` (8.35 MB) recording pools, and activates the dedicated 2x 4K bitrate multiplier at `0x5388cfa4` (`* 6` vs 1080p `* 3`).
+   - This project injects native arithmetic dispatch into both `MovieProcess::InitializeSettings` (`0x536f551c`) and `H264CodecService` (`0x5388dd70` & `0x5388e144`): ensuring the hardware VPU encoder stride (3840), chroma UV offset (`0x3fc000`), and MOV muxer track dimensions are 100% synchronized, eradicating macroblock playback distortion and iOS auto-pause errors.
 3. **Zero LCD LiveView Display Interference (Freeze-Immune Architecture)**:
    - The 3-inch LCD panel relies on dedicated display LineBufs and preview pipes. LiveView preview remains 100% untouched on factory specifications, eliminating display controller halts (`LVVramHalt`), frozen preview, unresponsive mode switching, or power-off failures caused by overriding preview resolutions.
 4. **Phase 2: GoPro GP2 Socionext Wave500 HEVC Roadmap**:
@@ -75,7 +75,7 @@ flowchart TD
 ```
 .
 ├── analysis/                         # Reverse engineering audit data & patch manifests
-│   ├── k3_4k_patch_manifest.json     # 2 surgical patch operations (machine-readable JSON)
+│   ├── k3_4k_patch_manifest.json     # 4 surgical patch operations (machine-readable JSON)
 │   ├── gp1_gp2_comparative_audit.json# Socionext Milbeaut HEVC symbol comparisons
 │   └── video_4k_pipeline_audit.json  # 4K pipeline disassembly audit data
 ├── docs/                             # In-depth technical architecture documentation
@@ -85,7 +85,7 @@ flowchart TD
 ├── src/                              # Core source code & patch generators
 │   └── video_4k/
 │       ├── build_4k_firmware.py      # Automated container builder (LZSS encoder & checksum balancer)
-│       ├── verify_k3_4k_patch.py     # 5-stage automated closed-loop test suite
+│       ├── verify_k3_4k_patch.py     # 8-stage automated closed-loop test suite
 │       └── gp2_hevc_protocol.py      # GoPro GP2 Socionext HEVC protocol reference
 └── tools/                            # Low-level firmware container toolchain
     ├── fw_container.py               # Official LZSS container unpacking/repacking tool

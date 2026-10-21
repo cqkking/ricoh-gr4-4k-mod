@@ -25,6 +25,24 @@
       "expected_hex": "0320a0e1",
       "replacement_hex": "847600e3",
       "length": 4
+    },
+    {
+      "id": "h264_codec_service_start_movie_session_dispatch",
+      "description": "H264CodecService::StartMovieSession framerate-to-resolution dispatch: 24p/30p -> 4K UHD VPU encoder, 60p -> 1080p FHD",
+      "vaddr": "0x5388dd70",
+      "offset": "0x8a5a80",
+      "expected_hex": "1c20d5e52c0094e5",
+      "replacement_hex": "012073e20020a043",
+      "length": 8
+    },
+    {
+      "id": "h264_codec_service_init_movie_session_dispatch",
+      "description": "H264CodecService::InitializeMovieSession framerate-to-resolution dispatch: 24p/30p -> 4K UHD VPU encoder, 60p -> 1080p FHD",
+      "vaddr": "0x5388e144",
+      "offset": "0x8a5e54",
+      "expected_hex": "1c20d5e52c0094e5",
+      "replacement_hex": "012073e20020a043",
+      "length": 8
     }
   ]
 }

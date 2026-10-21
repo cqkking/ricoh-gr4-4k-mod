@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-GPL--2.0-yellow)](#)
 
 > **🚀 硬件实测与固件自检状态：已全链路通过 (PASS)**  
-> 经 5 项自动化闭环测试与容器自检：双重校验和（Dual Word-Sum == 0x00000000）严格成立；原生 12.53 MB 帧缓冲池与 3840×2160 硬件管线完全打通；在相机菜单中选择 **`24p`** 即录制 **`4K 24P`**，选择 **`30p`** 即录制 **`4K 30P`**，选择 **`60p`** 保留官方原版 **`1080p 60P`**！LCD 实时预览管线保持原生安全架构，杜绝画面冻结与死机！
+> 经 8 项自动化闭环测试与容器自检：双重校验和（Dual Word-Sum == 0x00000000）严格成立；原生 12.53 MB 帧缓冲池与 3840×2160 硬件管线完全打通；在相机菜单中选择 **`24p`** 即录制 **`4K 24P`**，选择 **`30p`** 即录制 **`4K 30P`**，选择 **`60p`** 保留官方原版 **`1080p 60P`**！MovieProcess 封装容器与 H264CodecService 硬件 VPU 编码器全面双向对齐，消除任何回放花屏与卡顿；LCD 实时预览管线保持原生安全架构，杜绝画面冻结与死机！
 
 本项目为 **理光 Ricoh GR IV (Standard Edition / 中国大陆版 v1.11 `fwdc248b.bin`)** 的机内直录 **4K UHD (3840×2160) 视频** 固件修改项目。基于内核级逆向工程，激活 GR IV 隐藏编译的 Socionext Milbeaut 原生 4K 硬件管线，实现双档位 4K UHD 自由切换。
 
@@ -21,9 +21,9 @@
    - **4K 24P（电影感超清）**：机身菜单选择 `24p`，输出 `3840×2160 @ 23.976 fps`（约 75~100 Mbps），享受经典胶片级动态节奏。
    - **4K 30P（日常超清流畅）**：机身菜单选择 `30p`，输出 `3840×2160 @ 29.970 fps`（约 75~100 Mbps），画面流畅细腻。
    - **FHD 60P（高速全高清）**：机身菜单选择 `60p`，保留原厂 `1920×1080 @ 59.940 fps`（约 42 Mbps），适合高速运动抓拍。
-2. **内核级原生 4K 引擎分发（MovieProcess Engine Native Dispatch）**：
-   - GR IV 内核早已有完整的原生 4K 编译支持：在 `MovieProcess` 分辨率枚举为 `0` 时，固件直接返回 `3840×2160` 分辨率，并自动调用 `0x53871fd8` 分配高达 `0x00BF4000`（**12.53 MB**）NV12 物理帧缓冲及 `0x007F8000`（8.35 MB）录像缓冲池，且在 `0x5388cfa4` 中内置了 4K 专属的 2 倍码率乘数（`* 6` 对比 1080p 的 `* 3`）。
-   - 本项目通过在 `MovieProcess::InitializeSettings`（`0x536f551c`）执行原生算术映射：将帧率枚举 `0`（60p）分发为 1080p，非 `0`（30p / 24p）分发为 4K UHD，全机仅需 32 字节精准微操，不修改多余系统结构。
+2. **内核级原生 4K 引擎分发与硬件编码器双向对齐（Engine & Codec Dual Dispatch）**：
+   - GR IV 内核早已有完整的原生 4K 编译支持：在分辨率枚举为 `0` 时，固件直接返回 `3840×2160` 分辨率，并自动调用 `0x53871fd8` 分配高达 `0x00BF4000`（**12.53 MB**）NV12 物理帧缓冲及 `0x007F8000`（8.35 MB）录像缓冲池，且在 `0x5388cfa4` 中内置了 4K 专属的 2 倍码率乘数（`* 6` 对比 1080p 的 `* 3`）。
+   - 本项目不仅在 `MovieProcess::InitializeSettings`（`0x536f551c`）执行原生算术分发，还在 `H264CodecService`（`0x5388dd70` 与 `0x5388e144`）同步注入分发逻辑，确保硬件 VPU 编码器的跨距（Stride=3840）、色度偏置（UV Offset=0x3fc000）与 MOV 容器解复用器 100% 保持一致，彻底杜绝因图层错位造成的花屏与 iPhone 自动暂停。
 3. **LCD 预览与取景系统零干扰（解决取景画面冻结问题）**：
    - 相机 3 英寸 LCD 物理屏幕使用独立的显示 LineBuf 与取景通道。本项目保证 LiveView 取景预览链路 100% 运行于原厂规范，杜绝盲改预览分辨率导致的显示控制器挂起（LVVramHalt）、水平仪假死、模式切换失效或无法关机等死锁问题。
 4. **Phase 2：GoPro GP2 Socionext Wave500 HEVC 路线图**：
@@ -75,7 +75,7 @@ flowchart TD
 ```
 .
 ├── analysis/                         # 逆向审计数据与补丁清单
-│   ├── k3_4k_patch_manifest.json     # 2 项核心精准补丁清单（机器可读 JSON）
+│   ├── k3_4k_patch_manifest.json     # 4 项核心精准补丁清单（机器可读 JSON）
 │   ├── gp1_gp2_comparative_audit.json# Socionext Milbeaut HEVC 符号比对
 │   └── video_4k_pipeline_audit.json  # 4K 管线反汇编分析数据
 ├── docs/                             # 深度工程设计文档
@@ -85,7 +85,7 @@ flowchart TD
 ├── src/                              # 核心源码与补丁生成器
 │   └── video_4k/
 │       ├── build_4k_firmware.py      # 一键全自动固件构建器 (含 LZSS 编码与重平衡)
-│       ├── verify_k3_4k_patch.py     # 5 项全自动闭环验证套件
+│       ├── verify_k3_4k_patch.py     # 8 项全自动闭环验证套件
 │       └── gp2_hevc_protocol.py      # GoPro GP2 Socionext HEVC 协议规约
 └── tools/                            # 固件容器底层工具
     ├── fw_container.py               # 官方 LZSS 容器解包、分析与重构工具

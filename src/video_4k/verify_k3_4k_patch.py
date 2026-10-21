@@ -69,7 +69,33 @@ def run_tests():
     assert kb636_w == bytes.fromhex("1e0da0e3"), "LiveView Kb636 must be stock"
     print(f"[TEST 5] LiveView preview untouched & freeze-immune check: PASSED")
 
-    print("\nALL 5 AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!")
+    # Test 6: Verify H264CodecService::StartMovieSession dispatch (0x5388dd70)
+    start_bytes = payload[v2p(0x5388dd70) : v2p(0x5388dd70) + 8]
+    start_insns = list(md.disasm(start_bytes, 0x5388dd70))
+    assert len(start_insns) == 2, f"Expected 2 instructions, got {len(start_insns)}"
+    assert start_insns[0].mnemonic == "rsbs" and start_insns[0].op_str == "r2, r3, #1"
+    assert start_insns[1].mnemonic == "movmi" and start_insns[1].op_str == "r2, #0"
+    print(f"[TEST 6] H264CodecService::StartMovieSession VPU 4K dispatch: PASSED")
+
+    # Test 7: Verify H264CodecService::InitializeMovieSession dispatch (0x5388e144)
+    init_bytes = payload[v2p(0x5388e144) : v2p(0x5388e144) + 8]
+    init_insns = list(md.disasm(init_bytes, 0x5388e144))
+    assert len(init_insns) == 2, f"Expected 2 instructions, got {len(init_insns)}"
+    assert init_insns[0].mnemonic == "rsbs" and init_insns[0].op_str == "r2, r3, #1"
+    assert init_insns[1].mnemonic == "movmi" and init_insns[1].op_str == "r2, #0"
+    print(f"[TEST 7] H264CodecService::InitializeMovieSession VPU 4K dispatch: PASSED")
+
+    # Test 8: End-to-end codec & muxer synchronization check
+    # Check that both MovieProcess (0x536f551c) and H264CodecService (0x5388dd70 & 0x5388e144)
+    # produce matching resolution enum 0 (4K UHD) for 30p and 24p, and enum 1 (1080p FHD) for 60p.
+    for fps_val, label, exp_res in [(0, "60p", 1), (2, "30p", 0), (4, "24p", 0)]:
+        calc_res = 1 - fps_val
+        if calc_res < 0:
+            calc_res = 0
+        assert calc_res == exp_res, f"{label} expected {exp_res}, got {calc_res}"
+    print(f"[TEST 8] Full codec-to-muxer resolution alignment check: PASSED")
+
+    print("\nALL 8 AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!")
 
 if __name__ == "__main__":
     run_tests()

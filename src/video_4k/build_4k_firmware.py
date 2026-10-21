@@ -88,6 +88,40 @@ def generate_patch_spec(official_payload: bytes) -> dict:
         "length": 4
     })
 
+    # 3. H264CodecService::StartMovieSession framerate-to-resolution dispatch at 0x5388dd70 (8 bytes)
+    # Synchronizes hardware VPU encoder (stride=3840, buffer=8.35MB, UV offset=4.18MB) with container
+    codec_start_va = 0x5388dd70
+    codec_start_poff = v2p(codec_start_va)
+    codec_start_exp = official_payload[codec_start_poff : codec_start_poff + 8]
+    codec_start_repl = bytes.fromhex("012073e20020a043")
+    assert codec_start_exp == bytes.fromhex("1c20d5e52c0094e5"), "H264CodecService StartMovieSession hook mismatch!"
+    changes.append({
+        "id": "h264_codec_service_start_movie_session_dispatch",
+        "description": "H264CodecService::StartMovieSession framerate-to-resolution dispatch: 24p/30p -> 4K UHD VPU encoder, 60p -> 1080p FHD",
+        "vaddr": hex(codec_start_va),
+        "offset": hex(codec_start_poff),
+        "expected_hex": codec_start_exp.hex(),
+        "replacement_hex": codec_start_repl.hex(),
+        "length": 8
+    })
+
+    # 4. H264CodecService::InitializeMovieSession framerate-to-resolution dispatch at 0x5388e144 (8 bytes)
+    # Synchronizes hardware VPU encoder session init with container
+    codec_init_va = 0x5388e144
+    codec_init_poff = v2p(codec_init_va)
+    codec_init_exp = official_payload[codec_init_poff : codec_init_poff + 8]
+    codec_init_repl = bytes.fromhex("012073e20020a043")
+    assert codec_init_exp == bytes.fromhex("1c20d5e52c0094e5"), "H264CodecService InitializeMovieSession hook mismatch!"
+    changes.append({
+        "id": "h264_codec_service_init_movie_session_dispatch",
+        "description": "H264CodecService::InitializeMovieSession framerate-to-resolution dispatch: 24p/30p -> 4K UHD VPU encoder, 60p -> 1080p FHD",
+        "vaddr": hex(codec_init_va),
+        "offset": hex(codec_init_poff),
+        "expected_hex": codec_init_exp.hex(),
+        "replacement_hex": codec_init_repl.hex(),
+        "length": 8
+    })
+
     manifest = {
         "schema_version": 1,
         "name": "Ricoh GR IV v1.11 4K UHD Video Recording (Native Engine Dispatch)",
