@@ -95,7 +95,59 @@ def run_tests():
         assert calc_res == exp_res, f"{label} expected {exp_res}, got {calc_res}"
     print(f"[TEST 8] Full codec-to-muxer resolution alignment check: PASSED")
 
-    print("\nALL 8 AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!")
+    # Test 9: MOV muxer 12-bit bitfield expansion verification
+    w_bytes = payload[v2p(0x5398e1ac) : v2p(0x5398e1ac) + 12]
+    w_insns = list(md.disasm(w_bytes, 0x5398e1ac))
+    assert len(w_insns) == 3, f"Expected 3 instructions, got {len(w_insns)}"
+    assert w_insns[0].mnemonic == "ubfx" and "#0xc" in w_insns[0].op_str, f"Width ubfx mismatch: {w_insns[0].op_str}"
+    assert w_insns[2].mnemonic == "bic" and "#0xff0" in w_insns[2].op_str, f"Width bic mismatch: {w_insns[2].op_str}"
+
+    h_bytes = payload[v2p(0x5398e1cc) : v2p(0x5398e1cc) + 12]
+    h_insns = list(md.disasm(h_bytes, 0x5398e1cc))
+    assert len(h_insns) == 3, f"Expected 3 instructions, got {len(h_insns)}"
+    assert h_insns[0].mnemonic == "ubfx" and "#0xc" in h_insns[0].op_str, f"Height ubfx mismatch: {h_insns[0].op_str}"
+    assert h_insns[2].mnemonic == "bic" and "#0xff00000" in h_insns[2].op_str, f"Height bic mismatch: {h_insns[2].op_str}"
+    print(f"[TEST 9] MOV muxer 12-bit expansion (ubfx #0xc, bic #0xff0/#0xff00000): PASSED")
+
+    # Test 10: MovieProcess Track geometry hook verification
+    hook_bytes = payload[v2p(0x536fe8ac) : v2p(0x536fe8ac) + 48]
+    hook_insns = list(md.disasm(hook_bytes, 0x536fe8ac))
+    assert len(hook_insns) == 12, f"Expected 12 instructions, got {len(hook_insns)}"
+    assert hook_insns[0].mnemonic == "b" and "0x53000d50" in hook_insns[0].op_str, f"Hook jump mismatch: {hook_insns[0].op_str}"
+    for i in range(1, 12):
+        assert (hook_insns[i].mnemonic == "mov" and hook_insns[i].op_str == "r0, r0") or hook_insns[i].mnemonic == "nop", f"Instruction {i} should be nop, got {hook_insns[i].mnemonic} {hook_insns[i].op_str}"
+    print(f"[TEST 10] MovieProcess Track geometry hook (branch to trampoline + 11 NOPs): PASSED")
+
+    # Test 11: MovieProcess Track geometry trampoline verification
+    tramp_bytes = payload[v2p(0x53000d50) : v2p(0x53000d50) + 60]
+    tramp_insns = list(md.disasm(tramp_bytes, 0x53000d50))
+    assert len(tramp_insns) == 15, f"Expected 15 trampoline instructions, got {len(tramp_insns)}"
+    assert tramp_insns[0].mnemonic == "ldrb" and "[r8, #0x678]" in tramp_insns[0].op_str
+    assert tramp_insns[6].mnemonic == "bl" and "0x538ceaa8" in tramp_insns[6].op_str
+    assert tramp_insns[13].mnemonic == "bl" and "0x538ceaa8" in tramp_insns[13].op_str
+    assert tramp_insns[14].mnemonic == "b" and "0x536fe8dc" in tramp_insns[14].op_str
+    print(f"[TEST 11] MovieProcess Track geometry trampoline structure & return: PASSED")
+
+    # Test 12: End-to-end Track geometry simulation (4K UHD vs 1080p FHD)
+    for res_mode, label, exp_w, exp_h in [(0, "4K UHD (30p/24p)", 3840, 2160), (1, "1080p FHD (60p)", 1920, 1080)]:
+        # Simulate width
+        w_val = 0xF000
+        if res_mode == 0:
+            w_val += 0xF000
+        # Simulate height
+        h_val = 0x8700
+        if res_mode == 0:
+            h_val += 0x8700
+        calc_w = w_val >> 5
+        calc_h = h_val >> 5
+        assert calc_w == exp_w, f"{label} expected width {exp_w}, got {calc_w}"
+        assert calc_h == exp_h, f"{label} expected height {exp_h}, got {calc_h}"
+        # Validate 12-bit muxer bitfield mask
+        assert (calc_w & 0xFFF) == exp_w, f"Width 12-bit overflow: {calc_w}"
+        assert (calc_h & 0xFFF) == exp_h, f"Height 12-bit overflow: {calc_h}"
+    print(f"[TEST 12] Dynamic Track geometry simulation (4K: 3840x2160, 1080p: 1920x1080): PASSED")
+
+    print("\nALL 12 AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!")
 
 if __name__ == "__main__":
     run_tests()

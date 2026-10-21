@@ -122,6 +122,106 @@ def generate_patch_spec(official_payload: bytes) -> dict:
         "length": 8
     })
 
+    # 5. MOV Muxer Track Width 12-bit expansion at 0x5398e1ac (12 bytes)
+    # Expands 11-bit bitmask (max 2047) to 12-bit bitmask (max 4095) for 3840px 4K UHD width
+    muxer_w_va = 0x5398e1ac
+    muxer_w_poff = v2p(muxer_w_va)
+    muxer_w_exp = official_payload[muxer_w_poff : muxer_w_poff + 12]
+    muxer_w_repl = bytes.fromhex("5110ebe7503092e5ff3ec3e3")
+    assert muxer_w_exp == bytes.fromhex("5110eae7503092e57f3ec3e3"), "MOV muxer width hook mismatch!"
+    changes.append({
+        "id": "mov_muxer_width_12bit_expansion",
+        "description": "MOV muxer width 12-bit bitfield expansion (ubfx #0xc, bic #0xff0) to support 3840 width in container metadata",
+        "vaddr": hex(muxer_w_va),
+        "offset": hex(muxer_w_poff),
+        "expected_hex": muxer_w_exp.hex(),
+        "replacement_hex": muxer_w_repl.hex(),
+        "length": 12
+    })
+
+    # 6. MOV Muxer Track Height 12-bit expansion at 0x5398e1cc (12 bytes)
+    # Expands 11-bit bitmask (max 2047) to 12-bit bitmask (max 4095) for 2160px 4K UHD height
+    muxer_h_va = 0x5398e1cc
+    muxer_h_poff = v2p(muxer_h_va)
+    muxer_h_exp = official_payload[muxer_h_poff : muxer_h_poff + 12]
+    muxer_h_repl = bytes.fromhex("5110ebe7502090e5ff36c2e3")
+    assert muxer_h_exp == bytes.fromhex("5110eae7502090e57f36c2e3"), "MOV muxer height hook mismatch!"
+    changes.append({
+        "id": "mov_muxer_height_12bit_expansion",
+        "description": "MOV muxer height 12-bit bitfield expansion (ubfx #0xc, bic #0xff00000) to support 2160 height in container metadata",
+        "vaddr": hex(muxer_h_va),
+        "offset": hex(muxer_h_poff),
+        "expected_hex": muxer_h_exp.hex(),
+        "replacement_hex": muxer_h_repl.hex(),
+        "length": 12
+    })
+
+    # 7. MovieProcess Track Geometry Hook at 0x536fe8ac (48 bytes)
+    # Replaces stock 1920x1080 hardcoded Track::SetProperty(1) & SetProperty(2) with branch to trampoline
+    geom_hook_va = 0x536fe8ac
+    geom_hook_poff = v2p(geom_hook_va)
+    geom_hook_exp = official_payload[geom_hook_poff : geom_hook_poff + 48]
+    tramp_va = 0x53000d50
+    b_off = ((tramp_va - (geom_hook_va + 8)) >> 2) & 0x00ffffff
+    b_instr = struct.pack("<I", 0xea000000 | b_off)
+    geom_hook_repl = b_instr + bytes.fromhex("0000a0e1") * 11
+    assert geom_hook_exp == bytes.fromhex("403095e50110a0e3e40994e5ba20d3e18222a0e1784007eb403095e50210a0e3e40994e5bc20d3e18222a0e1724007eb"), "Geometry hook mismatch!"
+    changes.append({
+        "id": "movie_process_track_geometry_hook",
+        "description": "MovieProcess Track geometry hook: branch to trampoline at 0x53000d50 for dynamic 4K/1080p geometry dispatch",
+        "vaddr": hex(geom_hook_va),
+        "offset": hex(geom_hook_poff),
+        "expected_hex": geom_hook_exp.hex(),
+        "replacement_hex": geom_hook_repl.hex(),
+        "length": 48
+    })
+
+    # 8. MovieProcess Track Geometry Trampoline at 0x53000d50 (60 bytes)
+    # Dynamically dispatches Track Property 1 (Width) and Property 2 (Height)
+    # 4K UHD: Width = 3840 << 5 (0x1E000), Height = 2160 << 5 (0x10E00)
+    # 1080p FHD: Width = 1920 << 5 (0xF000), Height = 1080 << 5 (0x8700)
+    target_setprop = 0x538ceaa8
+    return_va = 0x536fe8dc
+
+    def arm_b(src: int, dst: int) -> bytes:
+        off = ((dst - (src + 8)) >> 2) & 0x00ffffff
+        return struct.pack("<I", 0xea000000 | off)
+
+    def arm_bl(src: int, dst: int) -> bytes:
+        off = ((dst - (src + 8)) >> 2) & 0x00ffffff
+        return struct.pack("<I", 0xeb000000 | off)
+
+    tramp_asm = [
+        bytes.fromhex("7826d8e5"), # ldrb r2, [r8, #0x678]
+        bytes.fromhex("000052e3"), # cmp r2, #0
+        bytes.fromhex("f02ca0e3"), # mov r2, #0xf000
+        bytes.fromhex("f02c8202"), # addeq r2, r2, #0xf000
+        bytes.fromhex("0110a0e3"), # mov r1, #1
+        bytes.fromhex("e40994e5"), # ldr r0, [r4, #0x9e4]
+        arm_bl(tramp_va + 24, target_setprop), # bl SetProperty
+        bytes.fromhex("7826d8e5"), # ldrb r2, [r8, #0x678]
+        bytes.fromhex("000052e3"), # cmp r2, #0
+        bytes.fromhex("872ca0e3"), # mov r2, #0x8700
+        bytes.fromhex("872c8202"), # addeq r2, r2, #0x8700
+        bytes.fromhex("0210a0e3"), # mov r1, #2
+        bytes.fromhex("e40994e5"), # ldr r0, [r4, #0x9e4]
+        arm_bl(tramp_va + 52, target_setprop), # bl SetProperty
+        arm_b(tramp_va + 56, return_va),       # b return_va
+    ]
+    tramp_repl = b"".join(tramp_asm)
+    tramp_poff = v2p(tramp_va)
+    tramp_exp = official_payload[tramp_poff : tramp_poff + len(tramp_repl)]
+    assert tramp_exp == b"\x00" * len(tramp_repl), "Trampoline cave is not all zeros!"
+    changes.append({
+        "id": "movie_process_track_geometry_trampoline",
+        "description": "MovieProcess Track geometry dynamic dispatch trampoline (4K: 3840x2160, 1080p: 1920x1080)",
+        "vaddr": hex(tramp_va),
+        "offset": hex(tramp_poff),
+        "expected_hex": tramp_exp.hex(),
+        "replacement_hex": tramp_repl.hex(),
+        "length": len(tramp_repl)
+    })
+
     manifest = {
         "schema_version": 1,
         "name": "Ricoh GR IV v1.11 4K UHD Video Recording (Native Engine Dispatch)",
@@ -191,6 +291,21 @@ def build():
     print("\n[*] Disassembling patched offset fixup in rebuilt payload:")
     fixup_bytes = patched_payload[v2p(0x536f5574) : v2p(0x536f5574) + 8]
     for ins in md.disasm(fixup_bytes, 0x536f5574):
+        print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
+
+    print("\n[*] Disassembling MOV muxer 12-bit width/height setters:")
+    muxer_bytes = patched_payload[v2p(0x5398e1ac) : v2p(0x5398e1cc) + 12]
+    for ins in md.disasm(muxer_bytes, 0x5398e1ac):
+        print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
+
+    print("\n[*] Disassembling MovieProcess geometry dispatch hook:")
+    hook_bytes = patched_payload[v2p(0x536fe8ac) : v2p(0x536fe8ac) + 16]
+    for ins in md.disasm(hook_bytes, 0x536fe8ac):
+        print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
+
+    print("\n[*] Disassembling MovieProcess geometry dispatch trampoline:")
+    tramp_bytes = patched_payload[v2p(0x53000d50) : v2p(0x53000d50) + 60]
+    for ins in md.disasm(tramp_bytes, 0x53000d50):
         print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
 
     # Write output file

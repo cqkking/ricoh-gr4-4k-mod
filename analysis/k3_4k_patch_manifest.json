@@ -43,6 +43,42 @@
       "expected_hex": "1c20d5e52c0094e5",
       "replacement_hex": "012073e20020a043",
       "length": 8
+    },
+    {
+      "id": "mov_muxer_width_12bit_expansion",
+      "description": "MOV muxer width 12-bit bitfield expansion (ubfx #0xc, bic #0xff0) to support 3840 width in container metadata",
+      "vaddr": "0x5398e1ac",
+      "offset": "0x9a5ebc",
+      "expected_hex": "5110eae7503092e57f3ec3e3",
+      "replacement_hex": "5110ebe7503092e5ff3ec3e3",
+      "length": 12
+    },
+    {
+      "id": "mov_muxer_height_12bit_expansion",
+      "description": "MOV muxer height 12-bit bitfield expansion (ubfx #0xc, bic #0xff00000) to support 2160 height in container metadata",
+      "vaddr": "0x5398e1cc",
+      "offset": "0x9a5edc",
+      "expected_hex": "5110eae7502090e57f36c2e3",
+      "replacement_hex": "5110ebe7502090e5ff36c2e3",
+      "length": 12
+    },
+    {
+      "id": "movie_process_track_geometry_hook",
+      "description": "MovieProcess Track geometry hook: branch to trampoline at 0x53000d50 for dynamic 4K/1080p geometry dispatch",
+      "vaddr": "0x536fe8ac",
+      "offset": "0x7165bc",
+      "expected_hex": "403095e50110a0e3e40994e5ba20d3e18222a0e1784007eb403095e50210a0e3e40994e5bc20d3e18222a0e1724007eb",
+      "replacement_hex": "2709e4ea0000a0e10000a0e10000a0e10000a0e10000a0e10000a0e10000a0e10000a0e10000a0e10000a0e10000a0e1",
+      "length": 48
+    },
+    {
+      "id": "movie_process_track_geometry_trampoline",
+      "description": "MovieProcess Track geometry dynamic dispatch trampoline (4K: 3840x2160, 1080p: 1920x1080)",
+      "vaddr": "0x53000d50",
+      "offset": "0x18a60",
+      "expected_hex": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "replacement_hex": "7826d8e5000052e3f02ca0e3f02c82020110a0e3e40994e54e3723eb7826d8e5000052e3872ca0e3872c82020210a0e3e40994e5473723ebd3f61bea",
+      "length": 60
     }
   ]
 }
