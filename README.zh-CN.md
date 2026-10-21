@@ -115,8 +115,16 @@ python worktrees/feat-4k-k3-hevc/src/video_4k/verify_k3_4k_patch.py
 [TEST 3] MovieProcess native 4K dispatch instructions: PASSED
 [TEST 4] Runtime dispatch simulation (60p->1080p, 30p->4K, 24p->4K): PASSED
 [TEST 5] LiveView preview untouched & freeze-immune check: PASSED
+[TEST 6] H264CodecService::StartMovieSession VPU 4K dispatch: PASSED
+[TEST 7] H264CodecService::InitializeMovieSession VPU 4K dispatch: PASSED
+[TEST 8] Full codec-to-muxer resolution alignment check: PASSED
+[TEST 9] Real MOV container muxer geometry hook (0x538924dc -> 0x53000d50): PASSED
+[TEST 10] CameraProperty::Is4KMovie hook (0x5375cba4 -> 0x53000da0): PASSED
+[TEST 11] Is4KMovieSupported hook (0x53885bf0 -> 0x53000dc0): PASSED
+[TEST 12] Unified 4K Engine Trampoline Cave structure & logic: PASSED
+[TEST 13] End-to-end sensor readout & container metadata simulation: PASSED
 
-ALL 5 AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!
+ALL 13 AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!
 ```
 
 ### 3. 一键编译生成刷机固件

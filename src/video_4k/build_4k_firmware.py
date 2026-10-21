@@ -122,67 +122,83 @@ def generate_patch_spec(official_payload: bytes) -> dict:
         "length": 8
     })
 
-    # 5. MOV Muxer Track Width 12-bit expansion at 0x5398e1ac (12 bytes)
-    # Expands 11-bit bitmask (max 2047) to 12-bit bitmask (max 4095) for 3840px 4K UHD width
-    muxer_w_va = 0x5398e1ac
-    muxer_w_poff = v2p(muxer_w_va)
-    muxer_w_exp = official_payload[muxer_w_poff : muxer_w_poff + 12]
-    muxer_w_repl = bytes.fromhex("5110ebe7503092e5ff3ec3e3")
-    assert muxer_w_exp == bytes.fromhex("5110eae7503092e57f3ec3e3"), "MOV muxer width hook mismatch!"
+    # 5. Real MOV Muxer Track & SampleEntry Geometry Hook at 0x538924dc (8 bytes)
+    # Hooks H264CodecService::StartMovieSession right after memcpy fills [r4, #0x68] + 0x644 template
+    # Replaces:
+    #   0x538924dc: ldr r2, [r4, #0x68]
+    #   0x538924e0: mov r1, #0xc
+    # With:
+    #   0x538924dc: b   0x53000d50
+    #   0x538924e0: nop
+    muxer_hook_va = 0x538924dc
+    muxer_hook_poff = v2p(muxer_hook_va)
+    muxer_hook_exp = official_payload[muxer_hook_poff : muxer_hook_poff + 8]
+    muxer_hook_repl = bytes.fromhex("1bbaddea0000a0e1") # b 0x53000d50; nop
+    assert muxer_hook_exp == bytes.fromhex("682094e50c10a0e3"), "MOV muxer geometry hook mismatch!"
     changes.append({
-        "id": "mov_muxer_width_12bit_expansion",
-        "description": "MOV muxer width 12-bit bitfield expansion (ubfx #0xc, bic #0xff0) to support 3840 width in container metadata",
-        "vaddr": hex(muxer_w_va),
-        "offset": hex(muxer_w_poff),
-        "expected_hex": muxer_w_exp.hex(),
-        "replacement_hex": muxer_w_repl.hex(),
+        "id": "mov_muxer_track_geometry_hook",
+        "description": "Real MOV Muxer Track & SampleEntry geometry hook at 0x538924dc -> branch to trampoline 0x53000d50",
+        "vaddr": hex(muxer_hook_va),
+        "offset": hex(muxer_hook_poff),
+        "expected_hex": muxer_hook_exp.hex(),
+        "replacement_hex": muxer_hook_repl.hex(),
+        "length": 8
+    })
+
+    # 6. CameraProperty::Is4KMovie Hook at 0x5375cba4 (12 bytes)
+    # Replaces stock property getter (always returning 0) with dynamic framerate-based 4K check:
+    # 24p / 30p -> 1 (4K Movie Mode), 60p -> 0 (1080p FHD Mode)
+    # Replaces:
+    #   0x5375cba4: ldr  r3, [r0]
+    #   0x5375cba8: ldrb r0, [r3, #0x7e1]
+    #   0x5375cbac: bx   lr
+    # With:
+    #   0x5375cba4: b    0x53000da0
+    #   0x5375cba8: nop
+    #   0x5375cbac: nop
+    is4k_va = 0x5375cba4
+    is4k_poff = v2p(is4k_va)
+    is4k_exp = official_payload[is4k_poff : is4k_poff + 12]
+    is4k_repl = bytes.fromhex("7d90e2ea0000a0e10000a0e1") # b 0x53000da0; nop; nop
+    assert is4k_exp == bytes.fromhex("003090e5e107d3e51eff2fe1"), "CameraProperty::Is4KMovie hook mismatch!"
+    changes.append({
+        "id": "camera_property_is_4k_movie_hook",
+        "description": "CameraProperty::Is4KMovie hook at 0x5375cba4 -> branch to helper at 0x53000da0",
+        "vaddr": hex(is4k_va),
+        "offset": hex(is4k_poff),
+        "expected_hex": is4k_exp.hex(),
+        "replacement_hex": is4k_repl.hex(),
         "length": 12
     })
 
-    # 6. MOV Muxer Track Height 12-bit expansion at 0x5398e1cc (12 bytes)
-    # Expands 11-bit bitmask (max 2047) to 12-bit bitmask (max 4095) for 2160px 4K UHD height
-    muxer_h_va = 0x5398e1cc
-    muxer_h_poff = v2p(muxer_h_va)
-    muxer_h_exp = official_payload[muxer_h_poff : muxer_h_poff + 12]
-    muxer_h_repl = bytes.fromhex("5110ebe7502090e5ff36c2e3")
-    assert muxer_h_exp == bytes.fromhex("5110eae7502090e57f36c2e3"), "MOV muxer height hook mismatch!"
+    # 7. LiveView Is4KMovieSupported Hook at 0x53885bf0 (8 bytes)
+    # Enables LiveViewControl 4K resolution manager and SelectSensorDriveMode 4K sensor mode (mode 6)
+    # Replaces stock stub returning 0:
+    #   0x53885bf0: mov r0, #0
+    #   0x53885bf4: bx  lr
+    # With:
+    #   0x53885bf0: b   0x53000dc0
+    #   0x53885bf4: nop
+    is_supp_va = 0x53885bf0
+    is_supp_poff = v2p(is_supp_va)
+    is_supp_exp = official_payload[is_supp_poff : is_supp_poff + 8]
+    is_supp_repl = bytes.fromhex("72ecddea0000a0e1") # b 0x53000dc0; nop
+    assert is_supp_exp == bytes.fromhex("0000a0e31eff2fe1"), "Is4KMovieSupported hook mismatch!"
     changes.append({
-        "id": "mov_muxer_height_12bit_expansion",
-        "description": "MOV muxer height 12-bit bitfield expansion (ubfx #0xc, bic #0xff00000) to support 2160 height in container metadata",
-        "vaddr": hex(muxer_h_va),
-        "offset": hex(muxer_h_poff),
-        "expected_hex": muxer_h_exp.hex(),
-        "replacement_hex": muxer_h_repl.hex(),
-        "length": 12
+        "id": "is_4k_movie_supported_hook",
+        "description": "LiveView Is4KMovieSupported hook at 0x53885bf0 -> branch to helper at 0x53000dc0",
+        "vaddr": hex(is_supp_va),
+        "offset": hex(is_supp_poff),
+        "expected_hex": is_supp_exp.hex(),
+        "replacement_hex": is_supp_repl.hex(),
+        "length": 8
     })
 
-    # 7. MovieProcess Track Geometry Hook at 0x536fe8ac (48 bytes)
-    # Replaces stock 1920x1080 hardcoded Track::SetProperty(1) & SetProperty(2) with branch to trampoline
-    geom_hook_va = 0x536fe8ac
-    geom_hook_poff = v2p(geom_hook_va)
-    geom_hook_exp = official_payload[geom_hook_poff : geom_hook_poff + 48]
-    tramp_va = 0x53000d50
-    b_off = ((tramp_va - (geom_hook_va + 8)) >> 2) & 0x00ffffff
-    b_instr = struct.pack("<I", 0xea000000 | b_off)
-    geom_hook_repl = b_instr + bytes.fromhex("0000a0e1") * 11
-    assert geom_hook_exp == bytes.fromhex("403095e50110a0e3e40994e5ba20d3e18222a0e1784007eb403095e50210a0e3e40994e5bc20d3e18222a0e1724007eb"), "Geometry hook mismatch!"
-    changes.append({
-        "id": "movie_process_track_geometry_hook",
-        "description": "MovieProcess Track geometry hook: branch to trampoline at 0x53000d50 for dynamic 4K/1080p geometry dispatch",
-        "vaddr": hex(geom_hook_va),
-        "offset": hex(geom_hook_poff),
-        "expected_hex": geom_hook_exp.hex(),
-        "replacement_hex": geom_hook_repl.hex(),
-        "length": 48
-    })
-
-    # 8. MovieProcess Track Geometry Trampoline at 0x53000d50 (60 bytes)
-    # Dynamically dispatches Track Property 1 (Width) and Property 2 (Height)
-    # 4K UHD: Width = 3840 << 5 (0x1E000), Height = 2160 << 5 (0x10E00)
-    # 1080p FHD: Width = 1920 << 5 (0xF000), Height = 1080 << 5 (0x8700)
-    target_setprop = 0x538ceaa8
-    return_va = 0x536fe8dc
-
+    # 8. Unified 4K Engine Trampoline Cave at 0x53000d50 (132 bytes)
+    # Contains:
+    #   - 0x53000d50..0x53000d8c (60 bytes): MOV Muxer Track/SampleEntry 4K/1080p geometry dispatch
+    #   - 0x53000da0..0x53000db8 (24 bytes): CameraProperty::Is4KMovie dynamic framerate evaluator
+    #   - 0x53000dc0..0x53000dd4 (20 bytes): Is4KMovieSupported dispatch bridge
     def arm_b(src: int, dst: int) -> bytes:
         off = ((dst - (src + 8)) >> 2) & 0x00ffffff
         return struct.pack("<I", 0xea000000 | off)
@@ -191,35 +207,69 @@ def generate_patch_spec(official_payload: bytes) -> dict:
         off = ((dst - (src + 8)) >> 2) & 0x00ffffff
         return struct.pack("<I", 0xeb000000 | off)
 
-    tramp_asm = [
-        bytes.fromhex("7826d8e5"), # ldrb r2, [r8, #0x678]
-        bytes.fromhex("000052e3"), # cmp r2, #0
-        bytes.fromhex("f02ca0e3"), # mov r2, #0xf000
-        bytes.fromhex("f02c8202"), # addeq r2, r2, #0xf000
-        bytes.fromhex("0110a0e3"), # mov r1, #1
-        bytes.fromhex("e40994e5"), # ldr r0, [r4, #0x9e4]
-        arm_bl(tramp_va + 24, target_setprop), # bl SetProperty
-        bytes.fromhex("7826d8e5"), # ldrb r2, [r8, #0x678]
-        bytes.fromhex("000052e3"), # cmp r2, #0
-        bytes.fromhex("872ca0e3"), # mov r2, #0x8700
-        bytes.fromhex("872c8202"), # addeq r2, r2, #0x8700
-        bytes.fromhex("0210a0e3"), # mov r1, #2
-        bytes.fromhex("e40994e5"), # ldr r0, [r4, #0x9e4]
-        arm_bl(tramp_va + 52, target_setprop), # bl SetProperty
-        arm_b(tramp_va + 56, return_va),       # b return_va
+    def arm_bne(src: int, dst: int) -> bytes:
+        off = ((dst - (src + 8)) >> 2) & 0x00ffffff
+        return struct.pack("<I", 0x1a000000 | off)
+
+    # Trampoline 1: MOV Muxer Track & Visual Entry Dimensions Dispatch
+    t1_asm = [
+        struct.pack("<I", 0xe5942068), # ldr r2, [r4, #0x68]
+        struct.pack("<I", 0xe5d43042), # ldrb r3, [r4, #0x42]
+        struct.pack("<I", 0xe3530000), # cmp r3, #0
+        arm_bne(0x53000d5c, 0x53000d80), # bne 0x53000d80
+        struct.pack("<I", 0xe2822c06), # add r2, r2, #0x600
+        struct.pack("<I", 0xe3003f00), # movw r3, #0xf00 (3840)
+        struct.pack("<I", 0xe300c870), # movw ip, #0x870 (2160)
+        struct.pack("<I", 0xe1c239b4), # strh r3, [r2, #0x94] -> offset 0x694 (Track Width)
+        struct.pack("<I", 0xe1c2c9b6), # strh ip, [r2, #0x96] -> offset 0x696 (Track Height)
+        struct.pack("<I", 0xe1c23eb4), # strh r3, [r2, #0xe4] -> offset 0x6e4 (SampleEntry Width)
+        struct.pack("<I", 0xe1c2ceb6), # strh ip, [r2, #0xe6] -> offset 0x6e6 (SampleEntry Height)
+        struct.pack("<I", 0xe5942068), # ldr r2, [r4, #0x68]
+        # not_4k (0x53000d80)
+        struct.pack("<I", 0xe3a0100c), # mov r1, #0xc
+        struct.pack("<I", 0xe5940064), # ldr r0, [r4, #0x64]
+        arm_b(0x53000d88, 0x538924e8),  # b 0x538924e8
     ]
-    tramp_repl = b"".join(tramp_asm)
-    tramp_poff = v2p(tramp_va)
-    tramp_exp = official_payload[tramp_poff : tramp_poff + len(tramp_repl)]
-    assert tramp_exp == b"\x00" * len(tramp_repl), "Trampoline cave is not all zeros!"
+    t1_bytes = b"".join(t1_asm)
+    pad1 = b"\x00" * (0x53000da0 - 0x53000d8c)
+
+    # Trampoline 2: CameraProperty::Is4KMovie Dynamic Framerate Helper (0x53000da0)
+    t2_asm = [
+        struct.pack("<I", 0xe5903000), # ldr r3, [r0]
+        struct.pack("<I", 0xe5d307da), # ldrb r0, [r3, #0x7da]
+        struct.pack("<I", 0xe3500001), # cmp r0, #1
+        struct.pack("<I", 0x23a00001), # movcs r0, #1
+        struct.pack("<I", 0x33a00000), # movcc r0, #0
+        struct.pack("<I", 0xe12fff1e), # bx lr
+    ]
+    t2_bytes = b"".join(t2_asm)
+    pad2 = b"\x00" * (0x53000dc0 - 0x53000db8)
+
+    # Trampoline 3: Is4KMovieSupported Dispatch Bridge (0x53000dc0)
+    t3_asm = [
+        struct.pack("<I", 0xe92d4800), # push {fp, lr}
+        arm_bl(0x53000dc4, 0x5372b620), # bl 0x5372b620 (CameraProperty::GetInstance)
+        struct.pack("<I", 0xe5900004), # ldr r0, [r0, #4]
+        arm_bl(0x53000dcc, 0x537584e8), # bl 0x537584e8 (CameraProperty::Is4KMovie)
+        struct.pack("<I", 0xe8bd8800), # pop {fp, pc}
+    ]
+    t3_bytes = b"".join(t3_asm)
+
+    cave_payload = t1_bytes + pad1 + t2_bytes + pad2 + t3_bytes
+    assert len(cave_payload) == 132, f"Cave length mismatch: {len(cave_payload)}"
+
+    cave_va = 0x53000d50
+    cave_poff = v2p(cave_va)
+    cave_exp = official_payload[cave_poff : cave_poff + len(cave_payload)]
+    assert cave_exp == b"\x00" * len(cave_payload), "Cave space is not all zeros!"
     changes.append({
-        "id": "movie_process_track_geometry_trampoline",
-        "description": "MovieProcess Track geometry dynamic dispatch trampoline (4K: 3840x2160, 1080p: 1920x1080)",
-        "vaddr": hex(tramp_va),
-        "offset": hex(tramp_poff),
-        "expected_hex": tramp_exp.hex(),
-        "replacement_hex": tramp_repl.hex(),
-        "length": len(tramp_repl)
+        "id": "engine_4k_trampoline_cave",
+        "description": "Unified 4K Engine Trampoline Cave (Track Geometry, Is4KMovie Helper, Is4KMovieSupported Bridge)",
+        "vaddr": hex(cave_va),
+        "offset": hex(cave_poff),
+        "expected_hex": cave_exp.hex(),
+        "replacement_hex": cave_payload.hex(),
+        "length": len(cave_payload)
     })
 
     manifest = {
@@ -293,19 +343,24 @@ def build():
     for ins in md.disasm(fixup_bytes, 0x536f5574):
         print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
 
-    print("\n[*] Disassembling MOV muxer 12-bit width/height setters:")
-    muxer_bytes = patched_payload[v2p(0x5398e1ac) : v2p(0x5398e1cc) + 12]
-    for ins in md.disasm(muxer_bytes, 0x5398e1ac):
+    print("\n[*] Disassembling patched MOV muxer track geometry hook (0x538924dc):")
+    muxer_bytes = patched_payload[v2p(0x538924dc) : v2p(0x538924dc) + 8]
+    for ins in md.disasm(muxer_bytes, 0x538924dc):
         print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
 
-    print("\n[*] Disassembling MovieProcess geometry dispatch hook:")
-    hook_bytes = patched_payload[v2p(0x536fe8ac) : v2p(0x536fe8ac) + 16]
-    for ins in md.disasm(hook_bytes, 0x536fe8ac):
+    print("\n[*] Disassembling patched CameraProperty::Is4KMovie hook (0x5375cba4):")
+    is4k_bytes = patched_payload[v2p(0x5375cba4) : v2p(0x5375cba4) + 12]
+    for ins in md.disasm(is4k_bytes, 0x5375cba4):
         print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
 
-    print("\n[*] Disassembling MovieProcess geometry dispatch trampoline:")
-    tramp_bytes = patched_payload[v2p(0x53000d50) : v2p(0x53000d50) + 60]
-    for ins in md.disasm(tramp_bytes, 0x53000d50):
+    print("\n[*] Disassembling patched Is4KMovieSupported hook (0x53885bf0):")
+    supp_bytes = patched_payload[v2p(0x53885bf0) : v2p(0x53885bf0) + 8]
+    for ins in md.disasm(supp_bytes, 0x53885bf0):
+        print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
+
+    print("\n[*] Disassembling patched Unified 4K Engine Trampoline Cave (0x53000d50):")
+    cave_bytes = patched_payload[v2p(0x53000d50) : v2p(0x53000d50) + 132]
+    for ins in md.disasm(cave_bytes, 0x53000d50):
         print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
 
     # Write output file
