@@ -30,14 +30,8 @@ from fw_container import (
     sha256_hex,
     word_sum,
 )
-from k3_gr4_4k_patcher import (
-    build_cave_payload,
-    encode_arm_branch,
-    CAVE_VA,
-    PLAN4_STUB_VA,
-    GR4_BASE,
-)
 
+GR4_BASE = 0x53000000
 RTOS_PAYLOAD_START = 0x00017D10
 
 def v2p(vaddr: int) -> int:
@@ -46,129 +40,57 @@ def v2p(vaddr: int) -> int:
 def generate_patch_spec(official_payload: bytes) -> dict:
     changes = []
 
-    # 1. Cave Payload at 0x53000e00 (128 bytes)
-    cave_payload = build_cave_payload()
-    cave_poff = v2p(CAVE_VA)
-    cave_exp = official_payload[cave_poff : cave_poff + len(cave_payload)]
-    assert cave_exp == b"\x00" * len(cave_payload), "Cave not empty!"
+    # 1. MovieProcess framerate-to-resolution dispatch at 0x536f551c (28 bytes)
+    # Replaces:
+    #   0x536f551c: ldrb r2, [r1, #0x1c]
+    #   0x536f5520: mov r4, r0
+    #   0x536f5524: ldr r3, [sb]
+    #   0x536f5528: mov r5, r1
+    #   0x536f552c: ldrb r1, [r1, #0x12]
+    #   0x536f5530: movw r7, #0x684
+    #   0x536f5534: strb r2, [r0, #0x678]
+    # With:
+    #   0x536f551c: mov r5, r1           ; r5 = settings struct pointer
+    #   0x536f5520: mov r4, r0           ; r4 = this
+    #   0x536f5524: ldr r3, [sb]         ; canary
+    #   0x536f5528: ldrb r1, [r5, #0x12] ; r1 = framerate (0=60p, 2=30p, 4=24p)
+    #   0x536f552c: rsbs r2, r1, #1      ; r2 = 1 - r1 (if 60p: r2=1, N=0; if 30p/24p: r2<0, N=1)
+    #   0x536f5530: movmi r2, #0         ; if 30p/24p: r2 = 0 (4K UHD)
+    #   0x536f5534: strb r2, [r0, #0x678]; store resolution enum [r0, #0x678]!
+    dispatch_va = 0x536f551c
+    dispatch_poff = v2p(dispatch_va)
+    dispatch_exp = official_payload[dispatch_poff : dispatch_poff + 28]
+    dispatch_repl = bytes.fromhex("0150a0e10040a0e1003099e51210d5e5012071e20020a0437826c0e5")
+    assert dispatch_exp == bytes.fromhex("1c20d1e50040a0e1003099e50150a0e11210d1e5847600e37826c0e5"), "Dispatch hook mismatch!"
     changes.append({
-        "id": "k3_plan4_recipe_cave",
-        "description": "Pentax K-3 III Plan 4 4K Recipe Sequence + Return Bridge",
-        "vaddr": hex(CAVE_VA),
-        "offset": hex(cave_poff),
-        "expected_hex": cave_exp.hex(),
-        "replacement_hex": cave_payload.hex(),
-        "length": len(cave_payload)
+        "id": "movie_process_framerate_to_4k_dispatch",
+        "description": "MovieProcess framerate-to-resolution dispatch: 24p/30p -> 4K UHD, 60p -> 1080p FHD",
+        "vaddr": hex(dispatch_va),
+        "offset": hex(dispatch_poff),
+        "expected_hex": dispatch_exp.hex(),
+        "replacement_hex": dispatch_repl.hex(),
+        "length": 28
     })
 
-    # 2. Plan 4 Stub Trampoline at 0x536498c4 (52 bytes)
-    stub_poff = v2p(PLAN4_STUB_VA)
-    stub_exp = official_payload[stub_poff : stub_poff + 52]
-    trampoline_ins = encode_arm_branch(PLAN4_STUB_VA, CAVE_VA)
-    stub_repl = struct.pack("<I", trampoline_ins) + (b"\x00\x00\xa0\xe1" * 12) # b #cave + 12 NOPs
+    # 2. Relocate movw r7, #0x684 to 0x536f5574 replacing dead mov r2, r3 (4 bytes)
+    fixup_va = 0x536f5574
+    fixup_poff = v2p(fixup_va)
+    fixup_exp = official_payload[fixup_poff : fixup_poff + 4]
+    fixup_repl = bytes.fromhex("847600e3") # movw r7, #0x684
+    assert fixup_exp == bytes.fromhex("0320a0e1"), "Fixup hook mismatch!"
     changes.append({
-        "id": "plan4_stub_trampoline",
-        "description": "Trampoline branch from Plan 4 stub to 4K recipe cave",
-        "vaddr": hex(PLAN4_STUB_VA),
-        "offset": hex(stub_poff),
-        "expected_hex": stub_exp.hex(),
-        "replacement_hex": stub_repl.hex(),
-        "length": 52
-    })
-
-    # 3a. In-place Slot Hijack: Case 3 (1080p 24p @ 0x536497f4) -> Case 4 (0x536498c4)
-    slot_va = 0x536497f4
-    slot_poff = v2p(slot_va)
-    slot_exp = official_payload[slot_poff : slot_poff + 4]
-    slot_repl = struct.pack("<I", 0x536498c4)
-    changes.append({
-        "id": "slot3_hijack_to_4k_24p",
-        "description": "Redirect Movie Jump Table Case 3 (24p) to 4K Ext (0x536498c4) -> 4K 24P",
-        "vaddr": hex(slot_va),
-        "offset": hex(slot_poff),
-        "expected_hex": slot_exp.hex(),
-        "replacement_hex": slot_repl.hex(),
+        "id": "movie_process_offset_reg_fixup",
+        "description": "Relocate movw r7, #0x684 to replace unused mov r2, r3",
+        "vaddr": hex(fixup_va),
+        "offset": hex(fixup_poff),
+        "expected_hex": fixup_exp.hex(),
+        "replacement_hex": fixup_repl.hex(),
         "length": 4
-    })
-
-    # 3b. In-place Slot Hijack: Case 2 (1080p 30p @ 0x536497f0) -> Case 4 (0x536498c4)
-    slot2_va = 0x536497f0
-    slot2_poff = v2p(slot2_va)
-    slot2_exp = official_payload[slot2_poff : slot2_poff + 4]
-    slot2_repl = struct.pack("<I", 0x536498c4)
-    changes.append({
-        "id": "slot2_hijack_to_4k_30p",
-        "description": "Redirect Movie Jump Table Case 2 (30p) to 4K Ext (0x536498c4) -> 4K 30P",
-        "vaddr": hex(slot2_va),
-        "offset": hex(slot2_poff),
-        "expected_hex": slot2_exp.hex(),
-        "replacement_hex": slot2_repl.hex(),
-        "length": 4
-    })
-
-    # 4. LiveView Kb588 Width & Height (0x5387f68c) -> 3840x2160
-    kb588_va = 0x5387f68c
-    kb588_poff = v2p(kb588_va)
-    kb588_exp = official_payload[kb588_poff : kb588_poff + 8]
-    kb588_repl = struct.pack("<II", 0xe3000f00, 0xe3003870) # movw r0, #0xf00 (3840); movw r3, #0x870 (2160)
-    changes.append({
-        "id": "liveview_kb588_res_3840x2160",
-        "description": "LiveView Kb588 Video Resolution 3840x2160",
-        "vaddr": hex(kb588_va),
-        "offset": hex(kb588_poff),
-        "expected_hex": kb588_exp.hex(),
-        "replacement_hex": kb588_repl.hex(),
-        "length": 8
-    })
-
-    # 5. LiveView Kb636 Width & Height (0x5388176c) -> 3840x2160
-    kb636_va = 0x5388176c
-    kb636_poff = v2p(kb636_va)
-    kb636_exp = official_payload[kb636_poff : kb636_poff + 8]
-    kb636_repl = struct.pack("<II", 0xe3000f00, 0xe3003870) # movw r0, #0xf00 (3840); movw r3, #0x870 (2160)
-    changes.append({
-        "id": "liveview_kb636_res_3840x2160",
-        "description": "LiveView Kb636 Video Resolution 3840x2160",
-        "vaddr": hex(kb636_va),
-        "offset": hex(kb636_poff),
-        "expected_hex": kb636_exp.hex(),
-        "replacement_hex": kb636_repl.hex(),
-        "length": 8
-    })
-
-    # 6. Movie Recording Resolution Descriptor Slot 2 (24p) @ 0x5404358c -> 3840x2160
-    mres_va = 0x5404358c
-    mres_poff = v2p(mres_va)
-    mres_exp = official_payload[mres_poff : mres_poff + 4]
-    mres_repl = struct.pack("<I", 0x08700f00) # LE16: 0x0f00 (3840), 0x0870 (2160)
-    changes.append({
-        "id": "movie_res_slot2_3840x2160",
-        "description": "Movie Recording Resolution Descriptor (Slot 2 = 24p) 3840x2160",
-        "vaddr": hex(mres_va),
-        "offset": hex(mres_poff),
-        "expected_hex": mres_exp.hex(),
-        "replacement_hex": mres_repl.hex(),
-        "length": 4
-    })
-
-    # 7. ResizeModel Resolution @ 0x53dbf08c -> 3840x2160
-    resize_va = 0x53dbf08c
-    resize_poff = v2p(resize_va)
-    resize_exp = official_payload[resize_poff : resize_poff + 8]
-    resize_repl = struct.pack("<II", 0x00000f00, 0x00000870)
-    changes.append({
-        "id": "resizemodel_res_3840x2160",
-        "description": "ResizeModel 1080p slot dimensions to 3840x2160",
-        "vaddr": hex(resize_va),
-        "offset": hex(resize_poff),
-        "expected_hex": resize_exp.hex(),
-        "replacement_hex": resize_repl.hex(),
-        "length": 8
     })
 
     manifest = {
         "schema_version": 1,
-        "name": "Ricoh GR IV v1.11 4K UHD Video Recording (Pentax K-3 III Port)",
+        "name": "Ricoh GR IV v1.11 4K UHD Video Recording (Native Engine Dispatch)",
         "target": {
             "model": "GR IV Standard Edition",
             "firmware_version": "1.11",
@@ -227,18 +149,14 @@ def build():
 
     # Disassembly verification on decoded payload
     md = Cs(CS_ARCH_ARM, CS_MODE_ARM)
-    print("\n[*] Disassembling patched RTOS Plan 4 stub in rebuilt payload:")
-    stub_bytes = patched_payload[v2p(PLAN4_STUB_VA) : v2p(PLAN4_STUB_VA) + 8]
-    for ins in md.disasm(stub_bytes, PLAN4_STUB_VA):
+    print("\n[*] Disassembling patched MovieProcess dispatch in rebuilt payload:")
+    dispatch_bytes = patched_payload[v2p(0x536f551c) : v2p(0x536f551c) + 28]
+    for ins in md.disasm(dispatch_bytes, 0x536f551c):
         print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
 
-    print("\n[*] Disassembling patched Cave 4K Recipe in rebuilt payload:")
-    cave_bytes = patched_payload[v2p(CAVE_VA) : v2p(CAVE_VA) + 16]
-    for ins in md.disasm(cave_bytes, CAVE_VA):
-        print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
-    print("    ...")
-    cave_tail = patched_payload[v2p(CAVE_VA) + 28*4 : v2p(CAVE_VA) + 32*4]
-    for ins in md.disasm(cave_tail, CAVE_VA + 28*4):
+    print("\n[*] Disassembling patched offset fixup in rebuilt payload:")
+    fixup_bytes = patched_payload[v2p(0x536f5574) : v2p(0x536f5574) + 8]
+    for ins in md.disasm(fixup_bytes, 0x536f5574):
         print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
 
     # Write output file
