@@ -16,7 +16,7 @@ from pathlib import Path
 from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM
 
 REPO_ROOT = Path(r"d:\Ricoh GR4 firmware Mod")
-WORKTREE_ROOT = REPO_ROOT / "worktrees" / "feat-dsp-ai-af"
+WORKTREE_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_DIR = REPO_ROOT / "tools"
 OFFICIAL_FW = REPO_ROOT / "firmware" / "official" / "v1.11" / "fwdc248b.bin"
 OUTPUT_DIR = WORKTREE_ROOT / "output"
@@ -130,7 +130,7 @@ def build_stage3_release():
     # Save release manifest
     manifest = {
         "release_type": "Stage 3 Dual-Hook Deep Learning Inference Pipeline & Live View Tracking Bridge",
-        "version": "1.0.5",
+        "version": "1.0.6",
         "official_fw_sha256": sha256_hex(raw_fw),
         "stage2_preserved_fw": {
             "path": str(STAGE2_FW),
@@ -145,17 +145,17 @@ def build_stage3_release():
         "sd_card_dependencies": sd_manifest["files"],
         "patch_manifest": patch_manifest,
         "runtime_pipeline": {
-            "hook1_boot_awakening": "LiveViewProcess3aContoller (0x536520f0) -> Cave 1 (0x53000d60) loads CEVA-CV DSP from Drive C: once on startup",
-            "hook2_continuous_ai_af": "FaceDetectionService::Task (0x5386ea8c) -> Cave 2 (0x53000e00) dual-guarantee Drive C: wakeup + per-frame inference",
-            "frame_source": "FdLibraryService -> p_FdEngine -> [p_FdEngine, #0xc] active preview frame (pitch [p_FdEngine, #0x10])",
-            "downsampler": "960x640 YUV LiveView -> 56x56 RGB tensor @ 0x51600000",
-            "dsp_inference": "msg_id 4 via SendMessage (0x539663c0) & WaitMessage (0x539666dc, timeout 100 ms)",
-            "output_heatmap": "64x64 peak scan @ 0x51610000",
-            "confidence_threshold": 25,
-            "face_result_structure": "m_DetectedFaceResult [r4, #0x78] + face_count [r4, #0x38, #0x30]",
+            "hook1_boot_awakening": "LiveViewProcess3aContoller (0x536520f0) -> Cave 1 (0x53000d60) loads CEVA-CV DSP + 1.14 MB K-3 III CNN weights from Drive C: once on startup (checks STARTED bit 0x4, clears flag on failure)",
+            "hook2_continuous_ai_af": "FaceDetectionService::Task (0x5386ea8c) -> Cave 2 (0x53000e00) strict one-shot fallback wakeup + per-frame inference without S1/power-off mutex deadlock",
+            "frame_source": "Hardware Ahip YUV420 planar buffer (320x212) via *(0x55080350 + 0x1c) / [m_AhipService, #0x60]",
+            "downsampler": "320x212 YUV420 -> 3-plane 56x56 (row stride 64) RGB tensor @ 0x51600000 + ARM D-Cache clean/barrier (0x538f0448, 0x538f04c4)",
+            "dsp_inference": "msg_id 4 via SendMessage (0x539663c0) & WaitMessage (0x539666dc, timeout 100 ms) with full K-3 III weights @ 0x516c0000 (677,824 B) & 0x517657c0 (461,408 B)",
+            "output_heatmap": "3-channel (BG, Human, Subject) 56x56 (row stride 64) int16_t segmentation map @ 0x51609a00 + D-Cache invalidate (0x538f0454)",
+            "confidence_threshold": 4,
+            "face_result_structure": "100-byte zeroed m_DetectedFaceResult [r4, #0x78] in Q8 fixed-point coordinates + face_count [r4, #0x38, #0x30] = 1",
             "af_tracking_target": "Native dispatch via UpdateFaceDetectionResult (0x5386e0e4); ZERO calls to 0x538e32c4 (CreateTask)",
             "lcd_osd_rendering": "UpdateFaceDetectionResult (0x5386e0e4) renders green AI Face/Eye box on LCD and delivers to AF",
-            "fallback_mechanism": "FotoNation LibAHFD (0x5383ec84) when confidence < 25",
+            "fallback_mechanism": "FotoNation LibAHFD (0x5383ec84) when max_diff < 4",
             "af_system": "GR4 165-point on-sensor PDAF (Zaf) locks onto detected subject centroid"
         }
     }

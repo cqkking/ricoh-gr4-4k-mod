@@ -20,8 +20,10 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(r"d:\Ricoh GR4 firmware Mod")
+WORKTREE_ROOT = Path(__file__).resolve().parents[2]
 K3_DSP_PATH = REPO_ROOT / "firmware" / "reference" / "k3iii_v220" / "unpacked" / "sections" / "06_DSP.bin"
-DEFAULT_OUT_DIR = REPO_ROOT / "worktrees" / "feat-dsp-ai-af" / "output" / "sd_card"
+K3_RTOS_PATH = REPO_ROOT / "firmware" / "reference" / "k3iii_v220" / "unpacked" / "sections" / "05_RTOS.bin"
+DEFAULT_OUT_DIR = WORKTREE_ROOT / "output" / "sd_card"
 
 CHUNK_DEST_VA = 0x51200000
 SPLIT_OFF_ID_S = 0x003ec000
@@ -30,28 +32,55 @@ SPLIT_OFF_IP = 0x003fc000
 SIZE_IP = 0x00004000    # 16 KB
 TOTAL_DSP_SIZE = 0x00400000 # 4 MB
 
+# K-3 III CNN Weights + Mean Table in 05_RTOS.bin (0x53932548 .. 0x53a48768)
+# Loaded as Chunk 1 of DF_EX.BIN @ 0x516c0000 by GR4 DspService::LoadEx (0x53965ff8)
+K3_RTOS_BASE = 0x52500000
+K3_WEIGHTS_START_VA = 0x53932548
+K3_WEIGHTS_END_VA   = 0x53a48768
+K3_WEIGHTS_SIZE     = K3_WEIGHTS_END_VA - K3_WEIGHTS_START_VA # 0x116220 (1,139,232 B)
+CHUNK1_DEST_VA      = 0x516c0000
+
 def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
-def extract_dsp_files(dsp_binary_path: Path = K3_DSP_PATH, out_dir: Path = DEFAULT_OUT_DIR) -> dict:
+def extract_dsp_files(
+    dsp_binary_path: Path = K3_DSP_PATH,
+    rtos_binary_path: Path = K3_RTOS_PATH,
+    out_dir: Path = DEFAULT_OUT_DIR,
+) -> dict:
     if not dsp_binary_path.exists():
         raise FileNotFoundError(f"Source DSP binary not found: {dsp_binary_path}")
+    if not rtos_binary_path.exists():
+        raise FileNotFoundError(f"Source K-3 III RTOS binary not found: {rtos_binary_path}")
 
     dsp_bytes = dsp_binary_path.read_bytes()
     if len(dsp_bytes) != TOTAL_DSP_SIZE:
         raise ValueError(f"Unexpected DSP binary size: {len(dsp_bytes)} bytes (expected {TOTAL_DSP_SIZE})")
 
+    rtos_bytes = rtos_binary_path.read_bytes()
+    w_off_start = K3_WEIGHTS_START_VA - K3_RTOS_BASE
+    w_off_end   = K3_WEIGHTS_END_VA - K3_RTOS_BASE
+    weights_payload = rtos_bytes[w_off_start:w_off_end]
+    assert len(weights_payload) == K3_WEIGHTS_SIZE, f"Unexpected weights size: {len(weights_payload)}"
+
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. Build DF_EX.BIN
-    # Format parsed by GR4 RTOS 0x53965ff8:
-    #   Header (16 bytes): uint32 num_chunks, uint32 res[3]
-    #   Chunk (8 bytes): uint32 dest_va (0x51200000), uint32 chunk_len (0x3ec000)
-    #   Payload: 0x3ec000 bytes
+    # Format parsed by GR4 RTOS DspService::LoadEx (0x53965ff8):
+    #   Header (16 bytes): uint32 num_chunks (2), uint32 res[3] (0, 0, 0)
+    #   Chunk 0 header (8 bytes):
+    #     [fp, #-0x48] = uint32 chunk_len (0x003ec000)
+    #     [fp, #-0x44] = uint32 dest_va   (0x51200000, verified against sb=0x51200000 @ 0x53966144!)
+    #   Chunk 0 payload: 0x3ec000 bytes (CEVA-CV executable & vector kernels)
+    #   Chunk 1 header (8 bytes):
+    #     [fp, #-0x48] = uint32 chunk_len (0x00116220 = 1,139,232 B)
+    #     [fp, #-0x44] = uint32 dest_va   (0x516c0000)
+    #   Chunk 1 payload: 0x116220 bytes (Full K-3 III Mean + Backbone + Head CNN weights)
     ex_payload = dsp_bytes[0:SPLIT_OFF_ID_S]
-    ex_hdr = struct.pack("<IIII", 1, 0, 0, 0)
-    ex_chunk_hdr = struct.pack("<II", CHUNK_DEST_VA, len(ex_payload))
-    df_ex_bytes = ex_hdr + ex_chunk_hdr + ex_payload
+    ex_hdr = struct.pack("<IIII", 2, 0, 0, 0)
+    ex_chunk0_hdr = struct.pack("<II", len(ex_payload), CHUNK_DEST_VA)
+    ex_chunk1_hdr = struct.pack("<II", len(weights_payload), CHUNK1_DEST_VA)
+    df_ex_bytes = ex_hdr + ex_chunk0_hdr + ex_payload + ex_chunk1_hdr + weights_payload
     df_ex_path = out_dir / "DF_EX.BIN"
     df_ex_path.write_bytes(df_ex_bytes)
 
