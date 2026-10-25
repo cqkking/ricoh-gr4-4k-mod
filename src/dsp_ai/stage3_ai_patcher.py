@@ -319,23 +319,14 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
 
     mark_label("dsp_is_running")
 
-    # 4b. Hybrid Stage 1: Run stock FotoNation detector first for crisp frontal face/eye boxes
-    insns.append(0xe5940038) # ldr  r0, [r4, #0x38] (FdLibraryService*)
-    curr_pc = cave_va + len(insns) * 4
-    insns.append(encode_arm_branch(curr_pc, FD_LIB_DETECT_VA, is_bl=True))
-    insns.append(0xe3500000) # cmp  r0, #0
-    branch_to("run_ai_cnn", is_bl=False, cond=0x1) # bne .run_ai_cnn
-    insns.append(0xe5940038) # ldr  r0, [r4, #0x38]
-    insns.append(0xe5941078) # ldr  r1, [r4, #0x78]
-    curr_pc = cave_va + len(insns) * 4
-    insns.append(encode_arm_branch(curr_pc, FD_LIB_GET_RES_VA, is_bl=True))
-    insns.append(0xe5943038) # ldr  r3, [r4, #0x38]
-    insns.append(0xe5932030) # ldr  r2, [r3, #0x30] (face_count from FotoNation)
-    insns.append(0xe3520000) # cmp  r2, #0
-    branch_to("ai_done", is_bl=False, cond=0xc) # bgt .ai_done (frontal face found -> use it!)
+    # 5. Pure Full-Time CEVA-CV AI CNN Mode (No Stage 1 FotoNation Pre-Filter):
+    #    Default face_count = 0 in FdLibraryService ([r4, #0x38]) before CNN inference
+    #    so the box clears cleanly when no subject is in view.
+    insns.append(0xe5943038) # ldr  r3, [r4, #0x38] (FdLibraryService*)
+    insns.append(0xe3530000) # cmp  r3, #0
+    insns.append(0x13a02000) # movne r2, #0
+    insns.append(0x15832030) # strne r2, [r3, #0x30] (face_count = 0)
 
-    mark_label("run_ai_cnn")
-    # 5. Hybrid Stage 2 (Tilted / Looking Down / Side Profile / Occluded Face):
     #    Extract Active Live View Planar YUV420 Frame from Ahip Hardware Driver
     #    Primary: *(uint32_t*)(0x55080350 + 0x1c), Secondary: *(0x55080350 + 0x14), Fallback: [m_AhipService, #0x60]
     emit_ldr_imm32(insns, 3, AHIP_DRV_BASE_VA)
@@ -347,15 +338,15 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     branch_to("have_ahip_desc", is_bl=False, cond=0x1) # bne .have_ahip_desc
     insns.append(0xe5942034) # ldr  r2, [r4, #0x34] (m_AhipService)
     insns.append(0xe3520000) # cmp  r2, #0
-    branch_to("ai_done", is_bl=False, cond=0x0) # beq .ai_done
+    branch_to("fallback_stock", is_bl=False, cond=0x0) # beq .fallback_stock
     insns.append(0xe5923060) # ldr  r3, [r2, #0x60] (desc_0)
     insns.append(0xe3530000) # cmp  r3, #0
-    branch_to("ai_done", is_bl=False, cond=0x0) # beq .ai_done
+    branch_to("fallback_stock", is_bl=False, cond=0x0) # beq .fallback_stock
 
     mark_label("have_ahip_desc")
     insns.append(0xe593000c) # ldr  r0, [r3, #0x0c] (Y_plane pointer, 320x212)
     insns.append(0xe3500000) # cmp  r0, #0
-    branch_to("ai_done", is_bl=False, cond=0x0) # beq .ai_done
+    branch_to("fallback_stock", is_bl=False, cond=0x0) # beq .fallback_stock
     insns.append(0xe5932010) # ldr  r2, [r3, #0x10] (U_plane pointer, 160x106)
     insns.append(0xe5933014) # ldr  r3, [r3, #0x14] (V_plane pointer, 160x106)
     insns.append(0xe1d4cfbc) # ldrh ip, [r4, #0xfc] (fd_w, default 320)
@@ -501,13 +492,22 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe58a3028) # str  r3, [sl, #0x28] (eye1.width)
     insns.append(0xe58a302c) # str  r3, [sl, #0x2c] (eye1.height)
 
-    # +0x4c: confidence score, +0x50: preserve tracked face_id from [r4, #0x118] (or 1)
-    # Reset lost_frames_counter [r4, #0x124] = 0 so SelectMainFace (0x5386dde0) never drops frames!
+    # +0x4c: confidence score, +0x50: face_id
+    # Cold-Start & Continuous Tracking Lock:
+    # Seed [r4, #0x118] = face_id, [r4, #0x11c] = face_id, [r4, #0x13c] = 1,
+    # [r4, #0x121] = 0, and [r4, #0x124] = 0 so UpdateFaceDetectionResult (0x5386e0e4)
+    # and SelectMainFace (0x5386dde0) immediately lock onto side-profile / low-head faces
+    # from Frame 1 without needing a prior frontal face!
     insns.append(0xe58a904c) # str  sb, [sl, #0x4c] (confidence)
     insns.append(0xe5941118) # ldr  r1, [r4, #0x118] (previous tracked face_id)
     insns.append(0xe3510000) # cmp  r1, #0
     insns.append(0x03a01001) # moveq r1, #1
-    insns.append(0xe58a1050) # str  r1, [sl, #0x50] (face_id)
+    insns.append(0xe58a1050) # str  r1, [sl, #0x50]  (face_id)
+    insns.append(0xe5841118) # str  r1, [r4, #0x118] (seed active tracked face_id)
+    insns.append(0xe584111c) # str  r1, [r4, #0x11c] (seed primary tracked face_id)
+    insns.append(0xe3a02001) # mov  r2, #1
+    insns.append(0xe5c4213c) # strb r2, [r4, #0x13c] (mark tracking active = 1)
+    insns.append(0xe5c40121) # strb r0, [r4, #0x121] (clear cold-start hysteresis flag = 0)
     insns.append(0xe2843f49) # add  r3, r4, #0x124
     insns.append(0xe1c300b0) # strh r0, [r3]         (lost_frames_counter = 0)
 
