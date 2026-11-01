@@ -1,6 +1,6 @@
 {
   "release_type": "Stage 3 Dual-Hook Deep Learning Inference Pipeline & Live View Tracking Bridge",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "official_fw_sha256": "a2f664dfca034059eb0fd6e18ab08684c326b4a034d85c164dad7e1ec9b5655f",
   "stage2_preserved_fw": {
     "path": "D:\\Ricoh GR4 firmware Mod\\worktrees\\feat-dsp-ai-af\\output\\fwdc248b_stage2_dsp_wake.bin",
@@ -10,7 +10,7 @@
   "stage3_firmware": {
     "path": "D:\\Ricoh GR4 firmware Mod\\worktrees\\feat-dsp-ai-af\\output\\fwdc248b_stage3_ai_track.bin",
     "size": 38842088,
-    "sha256": "593fece20ffc61777ae9d5be8f59af87a3289dcdce7e64a8818bd98f849f4941"
+    "sha256": "35cd54790a81734055834db1c97c54ef9b6740789aaaf3f3d749bed7e997d7d6"
   },
   "sd_card_dependencies": {
     "DF_EX.BIN": {
@@ -34,7 +34,7 @@
     }
   },
   "patch_manifest": {
-    "stage": "Stage 3 Deep Learning Inference Pipeline & Live View Tracking Bridge (v1.0.7)",
+    "stage": "Stage 3 Deep Learning Inference Pipeline & Live View Tracking Bridge (v1.0.9)",
     "dual_hooks": {
       "hook1_boot_awakening": {
         "site_vaddr": "0x536520f0",
@@ -42,7 +42,7 @@
         "original_hex": "0dc0a0e1f0d82de9",
         "patched_hex": "1abbe6ea0000a0e1",
         "cave_vaddr": "0x53000d60",
-        "cave_length": 160,
+        "cave_length": 84,
         "resume_vaddr": "0x53652108"
       },
       "hook2_continuous_ai_af": {
@@ -51,7 +51,7 @@
         "original_hex": "380094e57b40ffeb",
         "patched_hex": "db48deea0000a0e1",
         "cave_vaddr": "0x53000e00",
-        "cave_length": 1208,
+        "cave_length": 1440,
         "ai_resume_vaddr": "0x5386ea9c",
         "fallback_resume_vaddr": "0x5386ea94"
       }
@@ -59,8 +59,8 @@
     "code_cave": {
       "vaddr": "0x53000e00",
       "offset": "0x18b10",
-      "length": 1208,
-      "hex": "0f002de9f0472de908d04de2ac9225eb045090e5000055e3c600000a042095e5040012e32900001a008100e37e8145e3042098e5012082e2042088e5820052e3bc00002a013042e23f0013e3b900001a480084e2477c23eb0500a0e14310a0e30020a0e30030a0e3c19725eb000050e30700001a0020a0e3042085e5480084e2c83801e3fe3345e3001093e5e47b23eba80000ea0500a0e10010a0e30020a0e3db9425eb0500a0e10010a0e3199825eb431504e3561144e3001088e5480084e2c83801e3fe3345e3001093e5d47b23eb383094e5000053e30020a01330208315503300e3083545e31c2093e5000052e3142093050230a0e1000053e30500001a342094e5000052e38a00000a603092e5000053e38700000a0c0093e5000050e38400000a102093e5143093e5bccfd4e100005ce340c10003001000e3601145e3820000eb3fbd23eb001000e3601145e3ee2ca0e35abd23eb007000e37e7145e3000301e3000345e3000087e50000a0e3040087e5200087e5240087e5000000e3600145e3080087e5c00705e3760145e30c0087e5000000e36c0145e3100087e5080800e3080040e3140087e50a0c00e30c0c40e3180087e50c0c00e30c0c40e31c0087e5086100e37e6145e30000a0e3b000c6e10500a0e10610a0e10420a0e36430a0e300708de5f49425eb000050e34c00001a0500a0e1b010d6e16420a0e30730a0e1b49525eb000050e34500001a0cbd23eb001a09e3601145e3152ba0e30bbd23eb000a09e3600145e3820000eb020050e33b0000ba199080e2640059e36490a0c3b63500e3910307e0c93300e392030ce01e8c57e20080a0431e6c5ce20060a0433c5ca0e30c3100e37e3145e3009083e5048083e5086083e50c5083e5105083e578a094e500005ae32500000a0000a0e30010a0e301008ae7041081e2640051e3fbffffba00808ae504608ae508508ae50c508ae5061c57e20010a043062c5ce20020a0430c3ca0e320108ae524208ae528308ae52c308ae54c908ae5181194e5000051e30110a00350108ae5181184e51c1184e50120a0e33c21c4e52101c4e5493f84e2b000c3e1383094e5000053e30300000a0110a0e3301083e50010a0e3341083e508d08de2f047bde80f00bde858b621ea08d08de2f047bde80f00bde8380094e5cdf620eb50b621eaf0472de90040a0e30f60a0e3940606e02661a0e1960c27e0048381e00050a0e31760a0e3950606e02661a0e10690d7e709a0a0e109e0a0e1000052e31500000a000053e31300000a0fa0a0e3940a0ae0aaa1a0e1ace0a0e19a0e0ae0a6a08ae00ae0d2e70aa0d3e780e04ee280a04ae24e6149e0ca6046e01660e8e6cee08ee00ee089e01ee0e8e6caa08ae00a9089e01990e8e606a0a0e1056088e00090c6e500aec6e50e6c86e200eec6e5015085e2380055e3d9ffffba0060a0e3386088e53c6088e50e8c88e2386088e53c6088e50e8c88e2386088e53c6088e5014084e2380054e3c7ffffbaf087bde8f0472de90010a0e31c20a0e31c30a0e31c4c80e2385c80e20060a0e30070a0e3068387e08880a0e1f89090e1f8a094e1f8c095e10a005ce10ca0a0c109a04ae001005ae1020000da0a10a0e10720a0e10630a0e1017087e2380057e3efffffba016086e2380056e3ebffffba0100a0e10210a0e10320a0e1f087bde8"
+      "length": 1440,
+      "hex": "0f002de9f0472de908d04de2383094e5000053e30020a01330208315a89225eb045090e5000055e3f100000a042095e5040012e33400001a008100e37e8145e33e21d4e5000052e30300001a002088e5042088e50120a0e33e21c4e5042098e5012082e2042088e5143052e2e000003a1e0d53e3de00002a3f0013e3dc00001a480084e23b7c23eb0500a0e14310a0e30020a0e30030a0e3b59725eb000050e30700001a0020a0e3042085e5480084e2c83801e3fe3345e3001093e5d87b23ebcb0000ea0500a0e10010a0e30020a0e3cf9425eb0500a0e10010a0e30d9825eb431504e3561144e3001088e5480084e2c83801e3fe3345e3001093e5c87b23eb042095e5040012e3b900000a503300e3083545e30c9093e5242493e5000052e300209215000052e30500000a046092e5000056e30200000a087092e50c8092e5090000ea1c2093e5000052e314209305000052e3a600000a0c6092e5000056e3a300000a107092e5148092e5000059e30298a00333bd23eb0610a0e10920a0e133bd23ebbccfd4e100005ce340c10003be9fd4e1000059e3d49000030600a0e1001000e3601145e30720a0e10830a0e1930000eb23bd23eb001000e3601145e3ee2ca0e33ebd23eb007000e37e7145e3000401e3000345e3000087e50000a0e3040087e5200087e5240087e5000000e3600145e3080087e5c00705e3760145e30c0087e5000000e36c0145e3100087e5080800e3080040e3140087e50a0c00e30c0c40e3180087e50c0c00e30c0c40e31c0087e5086100e37e6145e30000a0e3b000c6e10500a0e10610a0e10420a0e36430a0e300708de5d89425eb000050e36300001a0500a0e1b010d6e16420a0e30730a0e1989525eb000050e35c00001af0bc23eb001a09e3601145e3152ba0e3efbc23eb000a09e3600145e39b0000eb020050e3520000ba020053e3010000aa040050e34e0000ba0a5ba0e3035385e0170b55e3175ba0c31e9080e2640059e36490a0c3bc3fd4e1000053e340310003910307e04930a0e3930707e02772a0e1be3fd4e1000053e3d430000392030ce04930a0e3930c0ce02cc2a0e1a58057e00080a043a5605ce00060a0430c3100e37e3145e3009083e5048083e5086083e50c5083e5105083e578a094e500005ae32b00000a0000a0e30010a0e301008ae7041081e2640051e3fbffffba00808ae504608ae508508ae50c508ae5061c57e20010a043062c5ce20020a043033ba0e320108ae524208ae528308ae52c308ae54c908ae5181194e5000051e30110a00350108ae5a52088e0002184e5a52086e0042184e5085184e50c5184e5181184e51c1184e50120a0e33c21c4e52101c4e5493f84e2b000c3e1383094e5000053e30300000a0110a0e3301083e50010a0e3341083e508d08de2f047bde80f00bde825b621eaf0472de90040a0e314609de5940606e0866186e0a664a0e1960c27e0048381e00050a0e3950c06e0866186e0a664a0e10690d7e7300059e38990a0310200003a900059e348a0a033a9908a3009a0a0e109e0a0e1000052e31600000a000053e31400000a14a09de5940a0ae08aa18ae02aa5a0e1ace0a0e19e0a0ae0a6a08ae00ae0d2e70aa0d3e780e04ee280a04ae24e6149e0ca6046e01660e8e6cee08ee00ee089e01ee0e8e6caa08ae00a9089e01990e8e606a0a0e1056088e00090c6e500aec6e50e6c86e200eec6e5015085e2380055e3d2ffffba0060a0e3386088e53c6088e50e8c88e2386088e53c6088e50e8c88e2386088e53c6088e5014084e2380054e3bfffffbaf087bde8f04f2de90010a0e31c20a0e31c30a0e300b0a0e3074b80e20e5b80e20060a0e30070a0e3068387e08880a0e1f89090e1f8a094e1f8c095e102c04ce20a005ce10ca0a0c109a04ae002005ae301b08ba201005ae1020000da0a10a0e10720a0e10630a0e1017087e2380057e3ecffffba016086e2380056e3e8ffffba0100a0e10210a0e10320a0e10b30a0e1f08fbde8"
     },
     "trampoline": {
       "vaddr": "0x5386ea8c",
@@ -72,8 +72,8 @@
     },
     "embedded_tables": {
       "desc_table": {
-        "vaddr": "0x53001300",
-        "offset": "0x19010",
+        "vaddr": "0x53001400",
+        "offset": "0x19110",
         "length": 728
       },
       "mean_table": {
@@ -104,17 +104,18 @@
   },
   "runtime_pipeline": {
     "stock_rom_bugfix": "Patched DspService::LoadDsp (0x53966eb0 & 0x53966ef4) to pass `sub r1, fp, #0x40` (C:\\DF_ID_S.BIN & C:\\DF_IP.BIN) instead of hardcoded A:\\ ROM paths",
-    "hook1_boot_awakening": "LiveViewProcess3aContoller (0x536520f0) -> Cave 1 (0x53000d60) loads CEVA-CV DSP + 1.14 MB K-3 III CNN weights from Drive C: once on startup",
-    "hook2_continuous_ai_af": "FaceDetectionService::Task (0x5386ea8c) -> Cave 2 (0x53000e00) pure full-time CEVA-CV CNN inference (Stage 1 FotoNation pre-filter removed) + cold-start tracking state seeding",
-    "cold_start_lock": "Seeds [r4, #0x118]/[r4, #0x11c] = face_id, [r4, #0x13c] = 1, [r4, #0x121] = 0, [r4, #0x124] = 0 so side-profile and low-head faces lock immediately from Frame 1 without needing a prior frontal face",
-    "frame_source": "Hardware Ahip YUV420 planar buffer (320x212) via *(0x55080350 + 0x1c) / *(0x55080350 + 0x14) / [m_AhipService, #0x60]",
-    "downsampler": "320x212 YUV420 -> 3-plane 56x56 (row stride 64) RGB tensor @ 0x51600000 + ARM D-Cache clean/barrier (0x538f0448, 0x538f04c4)",
+    "zero_stock_fallback": "FdLibraryService::DetectFace (0x5383ec84, stock FotoNation LibAHFD) is completely disconnected; 100% of LCD AF subject boxes originate from CEVA-CV hardware CNN",
+    "hook1_boot_awakening": "LiveViewProcess3aContoller (0x536520f0) -> Cave 1 (0x53000d60) zeroes STATUS_VA (0x517e0100..0x517e011f) on singleton creation without blocking early-boot 3A init on SD I/O",
+    "hook2_continuous_ai_af": "FaceDetectionService::Task (0x5386ea8c) -> Cave 2 (0x53000e00) uses constructor-zeroed [r4, #0x13e] to initialize boot retry counter (eliminating uninitialized DDR 0x517e0104 bug), waits 20 frames for SD mount, retries LoadDsp('C') every 64 frames up to 30 times (~65s) with mutex unlocked, then runs pure full-time CEVA-CV CNN inference",
+    "cold_start_lock": "Seeds [r4, #0x100..0x10c] = (rect_cx, rect_cy, box_size, box_size), [r4, #0x118]/[r4, #0x11c] = face_id, [r4, #0x13c] = 1, [r4, #0x121] = 0, [r4, #0x124] = 0 so SelectMainFace (0x5386dde0) and EVENT 0x04070001 lock instantaneously on Frame 1 from any head pose",
+    "frame_source": "Completed Ahip ring descriptor *(*(0x55080350 + 0x424)) dequeued by AhipService::WaitFrame (+0x04/+0x08/+0x0c, fallback *(0x55080350 + 0x1c)) + ARM D-Cache invalidate (0x538f0454) prior to CPU read",
+    "downsampler": "Aspect-ratio-aware ([r4, #0xfc] x [r4, #0xfe]) YUV420 -> 3-plane 56x56 (row stride 64) RGB tensor @ 0x51600000 with C0-continuous 2.0x backlit shadow recovery (Y < 48 -> 2x, 48..144 -> 72 + Y/2) + ARM D-Cache clean/barrier (0x538f04c4)",
     "dsp_inference": "msg_id 4 via SendMessage (0x539663c0) & WaitMessage (0x539666dc, timeout 100 ms) with full K-3 III weights @ 0x516c0000 (677,824 B) & 0x517657c0 (461,408 B)",
-    "output_heatmap": "3-channel (BG, Human, Subject) 56x56 (row stride 64) int16_t segmentation map @ 0x51609a00 + D-Cache invalidate (0x538f0454)",
-    "confidence_threshold": 2,
-    "face_result_structure": "100-byte zeroed m_DetectedFaceResult [r4, #0x78] in Q8 fixed-point + cold-start state seeded",
-    "af_tracking_target": "Native dispatch via UpdateFaceDetectionResult (0x5386e0e4); ZERO calls to 0x538e32c4 (CreateTask)",
-    "lcd_osd_rendering": "UpdateFaceDetectionResult (0x5386e0e4) renders green AI Face/Eye box on LCD and delivers to AF",
+    "output_heatmap": "Head-priority (fg = max(Ch1, Ch2 - 2)) 3-channel 56x56 (row stride 64) int16_t segmentation map @ 0x51609a00 + D-Cache invalidate (0x538f0454)",
+    "confidence_threshold": "max_diff >= 2 and (area_cnt >= 2 or max_diff >= 4)",
+    "face_result_structure": "100-byte zeroed m_DetectedFaceResult [r4, #0x78] in aspect-ratio-scaled Q8 fixed-point with dynamic blob-area box sizing [0x2800..0x5c00]",
+    "af_tracking_target": "Native dispatch via UpdateFaceDetectionResult (0x5386e0e4); ZERO calls to 0x538e32c4 (CreateTask) and ZERO calls to 0x5383ec84 (LibAHFD)",
+    "lcd_osd_rendering": "UpdateFaceDetectionResult (0x5386e0e4) renders green AI Face/Eye box on LCD and fires EVENT 0x04070001 to AF",
     "af_system": "GR4 165-point on-sensor PDAF (Zaf) locks onto detected subject centroid"
   }
 }
