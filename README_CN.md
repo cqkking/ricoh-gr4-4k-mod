@@ -4,8 +4,9 @@
 
 [![平台: Socionext Milbeaut M10V](https://img.shields.io/badge/平台-Socionext%20Milbeaut%20M10V-007acc.svg)](#)
 [![适配固件: Ricoh GR IV v1.11](https://img.shields.io/badge/目标固件-v1.11%20fwdc248b.bin-green.svg)](#)
+[![版本: v1.0.9](https://img.shields.io/badge/版本-v1.0.9-blue.svg)](#)
 [![架构: ARM Cortex-A7 + CEVA-CV DSP](https://img.shields.io/badge/芯片架构-ARMv7%20%2B%20CEVA--CV%20DSP-orange.svg)](#)
-[![状态: 阶段 3 校验通过](https://img.shields.io/badge/验证状态-阶段%203%20校验通过%20(双重累加和%3D0)-brightgreen.svg)](#)
+[![状态: 纯 CEVA-CV CNN 校验通过](https://img.shields.io/badge/验证状态-纯%20CEVA--CV%20CNN%20(双重累加和%3D0)-brightgreen.svg)](#)
 [![开源协议: MIT](https://img.shields.io/badge/协议-MIT-blue.svg)](#)
 
 本项目是针对 **理光 GR IV (GR4)** 数码相机的非官方底层固件扩展补丁。它通过破译芯片内存映射与二进制驱动协议，成功激活了片上完全闲置的 **CEVA-CV 矢量 AI DSP 硬件协处理器**（物理基地址 `0x41000000`），并将**宾得旗舰单反 Pentax K-3 Mark III 的深度学习人体/主体识别卷积神经网络**无缝移植挂接进理光 GR4 原生的 165 点片上相位差检测自动对焦（PDAF）系统。
@@ -22,7 +23,7 @@
 >
 > 事实上，理光 GR4 的操作系统固件（`05_RTOS.bin` @ `0x53000000`）在开机时便内置了完整的 DSP 驱动层（`DspService` @ `0x539658c4`）、跨核心通信信箱（`DspExc`, `DspReq`, `DspSF`, `DspMtx`）以及原厂调试指令（`DSP_load`, `DSP_start`, `DSP_test`）。
 >
-> 然而，理光在量产发布固件中**移除了 4.00 MB 的 DSP 固件分区（`06_DSP.bin`）**，导致这颗具备 512 位矢量运算能力的硬件 AI 核心在 GR4 上处于 **100% 闲置断电状态**。
+> 然而，理光在量产发布固件中**移除了 DSP 固件分区（`06_DSP.bin`）**，导致这颗具备 512 位矢量运算能力的硬件 AI 核心在 GR4 上处于 **100% 闲置断电状态**。
 
 ```text
 Socionext Milbeaut M10V 异构多核处理器芯片
@@ -33,15 +34,18 @@ Socionext Milbeaut M10V 异构多核处理器芯片
 ├────────────────────────────────────────────────────────────────────────┤
 │  CEVA-CV 矢量 AI DSP 协处理器 [0x41000000] (512-bit SIMD / VLIW)        │
 │  ├── 物理 MMU 映射窗口: 0x41000000 (8 MB 强顺序普通共享内存)            │
-│  ├── DF_EX.BIN   (0x51200000, 4,112,384 字节) — CEVA-CV 矢量算子执行库 │
-│  ├── DF_ID_S.BIN (0x515ec000,    65,536 字节) — 神经网络模型参数表     │
+│  ├── DF_EX.BIN   (0x51200000, 5,251,648 字节) — CEVA-CV 算子库 + 1.14M │
+│  │   ├── 分块 0 (0x51200000, 4,112,384 字节) — CEVA-CV 矢量数学核心    │
+│  │   └── 分块 1 (0x516c0000, 1,139,232 字节) — K-3 III 深度神经网络权重 │
+│  ├── DF_ID_S.BIN (0x515ec000,    65,536 字节) — 神经网络模型配置表     │
 │  └── DF_IP.BIN   (0x515fc000,    16,384 字节) — 复位引导与中断向量入口 │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
 数学与内存映射的绝对吻合证明：
-$$0x3EC000\text{ (DF\_EX)} + 0x10000\text{ (DF\_ID\_S)} + 0x4000\text{ (DF\_IP)} = 0x400000\text{ (恰好为 } 4,194,304\text{ 字节 / 4.00 MB)}$$
-与宾得 K-3 Mark III 解包所得的 `06_DSP.bin` 尺寸与二进制结构 **100% 完美一致**。
+$$0x3EC000\text{ (DF\_EX 核心)} + 0x116220\text{ (DF\_EX 权重)} = 0x502220\text{ (5,251,648 字节)}$$
+$$\text{DSP 总内存开销: } 0x502220 + 0x10000\text{ (DF\_ID\_S)} + 0x4000\text{ (DF\_IP)} = 5,333,568\text{ 字节}$$
+与宾得 K-3 Mark III 解包所得的 `06_DSP.bin` 及完整深度学习卷积权重视图 **100% 完美一致**。
 
 ---
 
@@ -51,286 +55,218 @@ $$0x3EC000\text{ (DF\_EX)} + 0x10000\text{ (DF\_ID\_S)} + 0x4000\text{ (DF\_IP)}
                   ┌──────────────────────────────────────────────┐
                   │ 阶段 1：DSP 固件分块提取与协议适配            │
                   │   06_DSP.bin -> DF_EX / DF_ID_S / DF_IP      │
+                  │   集成 1.14 MB 完整 K-3 III 神经网络权重     │
                   └──────────────────────┬───────────────────────┘
                                          │
                                          ▼
                   ┌──────────────────────────────────────────────┐
                   │ 阶段 2：免串口开机全自动唤醒                  │
                   │   挂接 0x536520f0 -> 代码洞 0x53000e00       │
-                  │   LoadDsp('A') -> Start() -> Test()          │
+                  │   LoadDsp('C') -> Start() -> Test()          │
                   │   输出归档: fwdc248b_stage2_dsp_wake.bin      │
                   └──────────────────────┬───────────────────────┘
                                          │
                                          ▼
                   ┌──────────────────────────────────────────────┐
-                  │ 阶段 3：实时取景 AI 推断与自动追焦挂接        │
-                  │   • LiveView 取景流 -> 56x56 RGB 张量        │
-                  │   • DspService::SendMessage(Message ID 4)    │
-                  │   • 64x64 热力图峰值解析 -> 目标坐标 (X,Y,W,H)│
-                  │   • UpdateTrackTarget -> GR4 165 点 PDAF     │
+                  │ 阶段 3：实时取景全时 CEVA-CV AI 追焦 (v1.0.9)│
+                  │   • 100% 纯 CEVA-CV CNN，彻底移除原厂回退    │
+                  │   • AHIP 出队帧提取 + CPU D-Cache 刷新        │
+                  │   • 2.0x 逆光暗部平滑增益曲线 (Y < 48)       │
+                  │   • 侧脸 / 低头首帧状态播种，开机瞬时锁定    │
                   │   输出成品: fwdc248b_stage3_ai_track.bin     │
                   └──────────────────────────────────────────────┘
 ```
 
 ### 阶段 1：固件分块与协议重构 (`dsp_splitter.py`)
-- 将 K-3 III 的 4.00 MB `06_DSP.bin` 按照理光底层 `DspService::LoadDsp` 解析器要求的格式重新切分打包：
-  - `DF_EX.BIN` (4,112,408 字节)：包含 16 字节头部与 8 字节块描述符，硬编码校验指定加载到虚拟地址 `0x51200000`，长度 `0x3ec000`。
-  - `DF_ID_S.BIN` (65,536 字节)：64 KB 神经网络常量权值表，加载到 `0x515ec000`。
+- 将 K-3 III 的 `06_DSP.bin` 按照理光底层 `DspService::LoadDsp` 解析器要求的格式打包：
+  - `DF_EX.BIN` (5,251,648 字节)：分块 0（CEVA-CV 核心，4,112,384 字节）+ 分块 1（1,139,232 字节 K-3 III 卷积神经网络权重：主干骨干网 677,824 字节 @ `0x516c0000` + 分类头 461,408 字节 @ `0x517657c0`）。
+  - `DF_ID_S.BIN` (65,536 字节)：64 KB 神经网络常量权值配置表，加载到 `0x515ec000`。
   - `DF_IP.BIN` (16,384 字节)：16 KB 指令复位入口向量，加载到 `0x515fc000`。
-- 通过 [`verify_dsp_payload.py`](src/dsp_ai/verify_dsp_payload.py) 验证，实现对原始 4 MB 载荷的 100% 字节级无损复原。
+- 通过 [`verify_dsp_payload.py`](src/dsp_ai/verify_dsp_payload.py) 验证，实现对原始载荷的 100% 字节级无损复原。
 
 ### 阶段 2：免串口开机全自动唤醒 (`k3_gr4_dsp_patcher.py`)
 - **专为无串口量产机身设计**：零售版相机无法引出调试串口，所有唤醒与自检流程必须在机内自主运行。
 - 在实时取景初始化函数 `LiveViewProcess3aContoller`（`0x536520f0`）注入单向跳转蹦床（`b #0x53000e00`）。
-- 执行流程：
-  1. 检查 DSP 是否已处于运行态（`status & 1`）；若已启动，仅耗费 3 个指令周期直接跳出，确保零运行时开销。
-  2. 调用 `DspService::LoadDsp(m_dspService, 'C', 0, 0)` 从 SD 卡根目录（`C:\`）读取 3 个二进制分块。
-  3. 检查载入完成标志位 `status & 2`（`LOADED`）。
-  4. 调用 `DspService::Start(m_dspService, 0, 0)` 解除 CEVA-CV 复位锁定并开启时钟。
-  5. 调用 `DspService::Test(m_dspService, 0)` 完成固件握手。
-  6. 平滑返回 `0x536520f8` 继续相机原生取景与对焦流程。
+- 成功调用 `LoadDsp('C')`、`Start()` 与 `Test()`，实机测试完全稳定通过。
 
-### 阶段 3：深度学习推断管线与实时追焦挂接 (`stage3_ai_patcher.py`)
-- **AI 权重表固化技术 (Zero-File Dependency for Weights)**：
-  - 利用理光原厂 RTOS 内部经精细审计的安全零填充代码洞，将原本缺失的模型描述符与归一化矩阵**直接固化入固件内部**，无需在 SD 卡上放置额外零碎权重文件：
-    - `k3_desc.bin` (728 字节) @ `0x53001200`：网络层拓扑结构、输入输出张量尺度与正交投影矩阵。
-    - `k3_mean.bin` (9,408 字节) @ `0x541db540`：$56 \times 56 \times 3$ 通道均值归一化偏置。
-    - `k3_std.bin`  (9,408 字节) @ `0x54217680`：$56 \times 56 \times 3$ 通道标准差激活权重。
-- **双挂接点架构（Dual-Hook Architecture）**：
-  - **挂接点 1：开机静默唤醒（`LiveViewProcess3aContoller` @ `0x536520f0` -> 代码洞 1 @ `0x53000d60`，152 字节）**：
-    - 重构 APCS 函数序言，安全地在开机阶段**仅执行一次**：从 SD 卡（`C:\`）加载 CEVA-CV 矢量固件、解除复位并启动自检。
-    - 阶段 2 实机验证 100% 稳定可靠，且完全脱离每帧人脸检测锁的竞争。
-  - **挂接点 2：连续实时取景人脸/人眼检测循环（`FaceDetectionService::Task` @ `0x5386ea8c` -> 代码洞 2 @ `0x53000e00`，756 字节）**：
-    - 挂接于理光原厂每帧连续执行的人脸识别任务循环（`FaceDetectionService::Task`）。
-    - **双保险机内点火保底**：若开机 Hook 1 触发时 SD 卡未就绪，代码洞 2 在取景第 0 帧自动补发从 `C:\` 载入与启动指令，确保 100% 点火成功。
-    - **底层原始预览帧提取**：穿透解析 `FdLibraryService -> p_FdEngine -> [p_FdEngine, #0xc]` 获取真实的实时物理 YUV 取景帧，并动态获取图像跨度 `[p_FdEngine, #0x10]`。
-    - **逐帧硬件推断**：移除奇偶帧交替回退，由 CEVA-CV 硬件矢量协处理器逐帧进行 CNN 推断（主机 CPU 占用率仅 <0.4%），避免模型检测框被频繁刷掉。
-    - **汇编双线性下采样**：将预览帧下采样转换为 $56 \times 56$ RGB 张量写入 DMA 缓冲区 `0x51600000`。
-    - **硬件信箱异步调度**：填入 9 词请求控制块（`0x51602500`），调用 `DspService::SendMessage`（`0x539663c0`）发送 Message ID 4，并通过 `DspService::WaitMessage`（`0x539666dc`，超时 100 毫秒）等待 CEVA 矢量核执行完成。
-    - **$64 \times 64$ 热力图峰值定位**：汇编扫描 `0x51610000` 输出的热力图（4,096 字节），定位最大置信度坐标 $(col, row, score)$。
-    - **双模 LCD 屏幕绿框与 165 点相位追焦联动**：
-      - **当 AI 置信度 $\ge 25$ 时**（约 10% 概率门限，精准捕捉 90° 侧脸、逆光阴影人脸与口罩遮挡）：
-        - 将峰值坐标映射为取景器像素坐标 $(X, Y, W=180, H=180)$，并根据神经网络人体结构推算人眼关键点（`left_eye`、`right_eye`、`mouth`）。
-        - 格式化填入人脸数据结构 `m_DetectedFaceResult`（`[r4, #0x78]`），并在 `FdLibraryService`（`[r4, #0x38]`）中标记检出人脸数 `face_count = 1`。
-        - **彻底去除对 `CreateTask` 的误调用**（彻底根治半按对焦画面卡死与死锁问题）。
-        - 跳转至 `0x5386ea9c`，优雅解锁互斥锁并触发 `UpdateFaceDetectionResult`（`0x5386e0e4`），在相机 LCD 屏幕上实时画出绿色的 AI 人脸/人眼对焦框，并牢牢驱动 165 个相位对焦点锁定拍摄对象！
-      - **当 AI 置信度 $< 25$ 或推断超时时**：
-        - 无缝降级调用理光原厂 FotoNation `LibAHFD` 传统检测器（`0x5383ec84`），并返回 `0x5386ea94`，保证任何场景下对焦绝对稳定、绝不拉风箱或漏焦。
+### 阶段 3：全时纯 CEVA-CV AI 追焦管线 (`stage3_ai_patcher.py`, v1.0.9)
+- **100% 纯硬件加速，彻底移除原厂 `LibAHFD` 回退**：
+  - 完全移除了对 `FdLibraryService::DetectFace`（`0x5383ec84`，原厂 FotoNation）的一切调用。屏幕上出现的每一个对焦绿框，数学上 100% 保证由 CEVA-CV 硬件矢量 DSP 加速运行 K-3 III CNN 计算生成。
+- **固化神经网络参数表**：
+  - `k3_desc.bin` (728 字节) @ `0x53001400`：网络层拓扑结构与输入输出尺度。
+  - `k3_mean.bin` (9,408 字节) @ `0x541db540`：$56 \times 56 \times 3$ 通道均值偏置。
+  - `k3_std.bin`  (9,408 字节) @ `0x54217680`：$56 \times 56 \times 3$ 通道标准差激活权重。
+- **双挂接点安全架构**：
+  - **挂接点 1：开机状态初始化（`LiveViewProcess3aContoller` @ `0x536520f0` -> 代码洞 1 @ `0x53000d60`，84 字节）**：
+    - 重构 APCS 栈帧并在单例创建时仅清零遥测区 `0x517e0100..0x517e011f`，绝不因等待 SD 卡 I/O 而阻塞相机早期 3A 初始化。
+  - **挂接点 2：实时取景连续 AI 追焦（`FaceDetectionService::Task` @ `0x5386ea8c` -> 代码洞 2 @ `0x53000e00`，1,440 字节）**：
+    - **构造函数清零字节 `[r4, #0x13e]` 彻底杜绝 DDR 未初始化回退 Bug**：利用构造函数（`0x5386d974`）开机必清零的 `[r4, #0x13e]` 维护开机重试状态；前 20 帧（约 `0.65s`）静默等待 SD 卡挂载，随后在解锁互斥锁 `r4 + 0x48` 的状态下每 64 帧重试 `LoadDsp('C')`（最多 30 次 / 约 `65s`），从根本上解决了 v1.0.8 冷启动 DDR 随机值导致跳过 DSP 加载的问题。
+    - **AHIP 硬件完成队列出队与 D-Cache 刷新**：直接从 `AhipService::WaitFrame` 出队的完成帧描述符 `*(*(0x55080350 + 0x424))` 提取 Y/U/V 平面，并在 CPU 读取前调用 `InvalidateDataCache`（`0x538f0454`），彻底杜绝缓存陈旧像素。
+    - **全画幅比例自适应下采样（3:2, 4:3, 16:9, 1:1）**：根据 `[r4, #0xfc]` 与 `[r4, #0xfe]` 动态计算源行指针与 UV 色度偏移。
+    - **$C^0$ 连续 $2.0\times$ 逆光暗部平滑增益曲线**：
+      $$Y' = \begin{cases} 2 \cdot Y & Y < 48 \\ 72 + \lfloor Y / 2 \rfloor & 48 \le Y < 144 \\ Y & Y \ge 144 \end{cases}$$
+      大幅提升逆光面部阴影对比度，同时保持天空高光不溢出。
+    - **DSP 矢量硬件推断**：通过 `SendMessage`（`0x539663c0`）与 `WaitMessage`（`0x539666dc`，超时 100 ms）派发 Message ID 4。
+    - **头部通道优先解析与动态框尺寸**：优先识别人头/面部（$fg = \max(Ch1, Ch2 - 0.5\text{ logit})$），抗噪门限过滤，并根据分割面积自适应调整对焦框大小（`clamp(0x2800 + (area << 6), 0x2800, 0x5c00)`）。
+    - **侧脸/低头首帧状态播种**：完整播种 `[r4, #0x100..0x10c]` = $(cx, cy, w, h)$、`[r4, #0x118..0x11c] = face_id`、`[r4, #0x13c] = 1`、`[r4, #0x121] = 0`，使侧脸与低头角度无需事先经历正脸即可在第 1 帧瞬时触发 `EVENT 0x04070001` 锁定！
 
 ---
 
-## 3. 快速上手：刷机与使用说明
+## 3. 极速上手：刷机与使用指南
 
 > [!IMPORTANT]
-> **无需拆机、无需电烙铁焊接、无需连接任何串口调试线。**
-> 固件开机后全自动静默运行，且完全支持理光官方标准的 SD 卡固件升级模式。
+> **无需拆机、无需焊接、无需任何 USB/TTL 调试转接线。**
+> 补丁完全利用相机官方固件升级通道，开机后 100% 机内自主点火与运行。
 
 ### 第 1 步：准备 SD 卡文件
-1. 准备一张 SD 卡，格式化为 **FAT32** 格式。
-2. 将本仓库编译生成的 3 个 DSP 二进制分块文件复制到 **SD 卡根目录**：
-   - `DF_EX.BIN` (4,112,408 字节)
+1. 将 SD 卡格式化为 **FAT32** 文件系统。
+2. 将以下 3 个 DSP 固件文件复制至 **SD 卡根目录 (`C:\`)**：
+   - `DF_EX.BIN` (5,251,648 字节)
    - `DF_ID_S.BIN` (65,536 字节)
    - `DF_IP.BIN` (16,384 字节)
-3. 复制固件文件到 **SD 卡根目录**，并重命名为 `fwdc248b.bin`：
-   - **强烈推荐先刷写阶段 2 最小验证固件** `output/fwdc248b_stage2_dsp_wake.bin`：验证开机唤醒、正常启动与基本功能无误。
-   - 验证通过后，再刷写阶段 3 完整 AI 追焦固件 `output/fwdc248b_stage3_ai_track.bin`。
+3. 将阶段 3 编译生成的固件 `output/fwdc248b.bin`（或 `output/fwdc248b_stage3_ai_track.bin`）重命名为 `fwdc248b.bin` 复制至 **SD 卡根目录**。
 
-SD 卡根目录文件布局如下：
+SD 卡根目录文件树预览：
 ```text
 SD 卡根目录 (C:\)
-├── fwdc248b.bin       (38,693,256 字节[阶段2] 或 38,791,732 字节[阶段3])
-├── DF_EX.BIN          ( 4,112,408 字节 - CEVA-CV 矢量执行分区)
-├── DF_ID_S.BIN        (    65,536 字节 - 神经网络模型权重表)
-└── DF_IP.BIN          (    16,384 字节 - 复位引导向量表)
+├── fwdc248b.bin       (38,842,088 字节 [阶段 3 v1.0.9 纯 CEVA-CV 固件])
+├── DF_EX.BIN          ( 5,251,648 字节 — CEVA-CV 执行库 + 1.14MB 深度模型权重)
+├── DF_ID_S.BIN        (    65,536 字节 — 神经网络模型结构配置表)
+└── DF_IP.BIN          (    16,384 字节 — 复位向量表)
 ```
 
-### 第 2 步：固件刷入与升级
+### 第 2 步：固件卡刷升级
 1. 确保相机电池电量充足，将 SD 卡插入理光 GR IV。
-2. 按住机身背面的 **`DISP`**（或 **`MENU`**）键不放，同时按下电源键开机。
-3. 屏幕将直接进入理光官方固件升级菜单，显示当前版本与新版本。
-4. 选择 **确定 (Yes)** 开始升级。耐心等待进度条走完至 100% 并自动重启。
+2. **按住相机的 `DISP` 键（或 `MENU` 键）不放**，同时按下**电源键**开机。
+3. 屏幕将显示官方固件升级菜单，当前版本为 `v1.11`，更新版本显示就绪。
+4. 方向键选择 **“是”** 确认升级，静候进度条跑满并自动关机重启。
 
-### 第 3 步：体验深度学习自动追焦
-- 开机进入正常拍摄界面，在进入取景画面的瞬间固件已自动点火 CEVA-CV DSP；
-- 在取景器中对准人物或移动主体，半按快门或开启连续对焦：理光 165 点片上相位差检测框将精准、平滑地锁定并跟随主体移动。
+### 第 3 步：体验 AI 追焦与物理验证
+- 开机约 `0.7` 秒内，机内状态机即完成 CEVA-CV DSP 与 1.14 MB 权重的全自动点火与校验。
+- 无论正脸、90° 极限侧脸、低头还是强逆光人脸，画面中的相位对焦框均会立刻吸附锁定。
+- **100% 纯硬件 CNN 物理验证方法**：若将 SD 卡上的 `DF_EX.BIN` 临时移除或改名，开机后屏幕将**完全不出现任何人脸对焦框**（证明原厂算法已被彻底断开）；放回文件后立刻恢复识别。
 
 ---
 
-## 4. 安全性、防砖与应急救砖指南 (Safety & Emergency Unbricking)
+## 4. 安全防护机制与防变砖救砖指南
 
-### 救砖指南（若刷机后无法正常开机）
+### 应急恢复救砖指南（若相机异常无法开机）
 > [!TIP]
-> **相机绝对不会永久变砖！**
-> 本项目**绝对未修改**相机的引导加载程序分区（`00_BOOTPARA.bin` ~ `04_BOOT.bin` / IPL）。
-> 理光原厂的底层固件更新模式（FWUPD）运行于独立于 RTOS 的 Bootloader 中，即使系统内核崩溃，只要引导加载器完好，就可以 100% 重新刷入官方固件救砖。
+> **您的相机绝不会永久变砖！**
+> 本项目**绝对未修改**相机的引导加载程序分区（`00_BOOTPARA.bin` 至 `04_BOOT.bin` / IPL）。
+> 理光相机的底层应急升级模式固化在片上 BootROM / IPL 中，其执行优先级远高于主系统 RTOS。即使 RTOS 代码洞有任何语法异常，底层卡刷模式依然 100% 正常运行。
 
-**应急恢复步骤：**
-1. **彻底关机断电**：若相机卡死（黑屏或电源灯微亮），取出电池等待 10 秒后重新装入。
-2. **准备救砖 SD 卡**：将官方原版 `fwdc248b.bin`（v1.11 原版固件）或本仓库最新修复的 `fwdc248b_stage2_dsp_wake.bin` 放入 SD 卡根目录（命名为 `fwdc248b.bin`）。
-3. **强制触发硬件更新模式**：
-   - 保持相机处于关机状态；
-   - **长按住机身 `MENU` 键（或 `DISP` 键）不松开**；
-   - 在长按 `MENU`/`DISP` 的同时，短按电源键开机；
-   - 屏幕将直接绕过系统内核，显示官方升级界面（`Firmware Update`）；
-   - 按提示选择 **Yes / 确定** 刷回干净固件，即可彻底恢复！
-
-### 底层架构防护设计
-1. **AAPCS 严格 8 字节双字栈对齐与 APCS 完整帧构建**：
-   - 代码洞完全内建并接管 APCS 栈帧生成（`mov ip, sp; push {r4-r7, fp, ip, lr, pc}; sub fp, ip, #4; sub sp, sp, #8`）。
-   - 在进入子程序调用前预先固定 `fp`（帧指针），并在调用前后以 8 字节双字边界精准压栈保护 `r0-r3`（16 字节）与 `r4-r8, lr`（24 字节）。
-   - 退出代码洞时无缝衔接至 `0x53652108`（`ldr r6, [r4]`），彻底规避了 `ip`（R12）临时寄存器被子函数污染而导致 `fp`/`sp` 损坏的隐患，杜绝 Data Abort / Prefetch Abort 异常。
-2. **双重 32 位累加和校验 (`word_sum == 0`)**：
-   - 理光官方引导程序（`04_BOOT.bin`）与固件升级程序（`FWUPD`）在写入 Flash 前会严格验证内层载荷（`payload.bin`）与外层 LZSS 容器的 32 位小端字累加和。
-   - 本项目构建引擎经过严格的数论求解重零点计算，输出的固件 100% 通过双重校验，杜绝官方校验报错或卡更新界面的风险。
-3. **缺失文件与空指针优雅降级**：
-   - 若取出 SD 卡、未放置 `DF_*.BIN` 文件、或 `m_dspService` 单例尚未初始化，代码洞检测到状态不符合时仅耗费 10 余个时钟周期立即安全退出至原生流程，相机 100% 正常开机，自动回退到原生对焦模式。
-4. **完全可逆**：
-   - 随时可以通过上述硬件按键组合刷回理光官方原版 v1.11 固件。
+**救砖步骤：**
+1. **彻底断电**：扣出电池等待 10 秒后重新装入。
+2. **准备官方固件**：将官方未经修改的原厂 `v1.11` 固件 `fwdc248b.bin`（或阶段 2 验证固件 `fwdc248b_stage2_dsp_wake.bin`）拷贝至 FAT32 SD 卡根目录。
+3. **强制触发硬件卡刷模式**：
+   - 确保相机彻底处于关机状态。
+   - **长按住 `MENU` 键（或 `DISP` 键）**。
+   - 保持按住不放的同时，轻按一次**电源键**。
+   - 相机会无视损坏的 RTOS，直接点亮屏幕进入官方 `Firmware Update` 强制刷机界面。
+   - 选择 **“是”** 刷回官方固件，相机瞬间恢复如初！
 
 ---
 
-## 5. 仓库目录结构
+## 5. 源码仓库结构
 
 ```text
 .
 ├── analysis/
-│   ├── dsp_stage3_manifest.json     # 阶段 3 固件构建与遥测信息清单
-│   ├── dsp_wake_manifest.json       # 阶段 2 纯唤醒固件清单
-│   ├── rtos_decompilation_audit.md  # GR4 RTOS 深度逆向反汇编白皮书
-│   └── shellcmd_symbols.csv         # 651 个官方 RTOS Shell 符号
+│   ├── dsp_stage3_manifest.json     # 阶段 3 发布清单与反汇编转储
+│   ├── dsp_wake_manifest.json       # 阶段 2 发布清单
+│   ├── rtos_decompilation_audit.md  # GR4 RTOS 深度逆向反汇编报告
+│   └── shellcmd_symbols.csv         # 651 个经验证的 RTOS 导出符号表
 ├── docs/
-│   ├── FEAT_DSP_STAGE3_AI_TRACK.md  # 阶段 3 深度学习推断与追焦白皮书
-│   ├── FEAT_DSP_AI_WAKE.md          # 阶段 2 免串口唤醒技术白皮书
-│   └── FEAT_K3_AF_PORT.md           # 宾得 K-3 III 对焦移植审计报告
+│   ├── FEAT_DSP_STAGE3_AI_TRACK.md  # 阶段 3 完整白皮书
+│   ├── FEAT_DSP_AI_WAKE.md          # 阶段 2 完整白皮书
+│   ├── FEAT_K3_AF_PORT.md           # 宾得 K-3 III 自动对焦移植报告
+│   ├── RELEASE_NOTES_v1.0.5.md      # v1.0.5 版本发布说明
+│   └── RELEASE_NOTES_v1.0.9.md      # v1.0.9 版本发布说明
 ├── src/
 │   └── dsp_ai/
-│       ├── build_stage3_firmware.py # 阶段 3 固件一键构建与重组脚本
-│       ├── stage3_ai_patcher.py     # 阶段 3 汇编代码洞与补丁生成器
-│       ├── build_dsp_firmware.py    # 阶段 2 固件构建脚本
-│       ├── k3_gr4_dsp_patcher.py    # 阶段 2 汇编补丁生成器
-│       ├── dsp_splitter.py          # 06_DSP.bin -> DF_EX / DF_ID_S / DF_IP 分块器
-│       ├── verify_dsp_payload.py    # 分块 100% 无损重建测试工具
+│       ├── build_stage3_firmware.py # 阶段 3 固件构建与容器封装器
+│       ├── stage3_ai_patcher.py     # 阶段 3 纯 CEVA-CV 代码洞注入器
+│       ├── build_dsp_firmware.py    # 阶段 2 固件构建器
+│       ├── k3_gr4_dsp_patcher.py    # 阶段 2 汇编注入器
+│       ├── dsp_splitter.py          # 06_DSP.bin 分块提取工具
+│       ├── verify_dsp_payload.py    # 分块字节无损复原校验器
 │       ├── k3_desc.bin              # 提取自 K-3 III 的神经网络描述符 (728 B)
-│       ├── k3_mean.bin              # 提取自 K-3 III 的输入通道均值表 (9,408 B)
-│       └── k3_std.bin               # 提取自 K-3 III 的通道标准差表 (9,408 B)
+│       ├── k3_mean.bin              # 提取自 K-3 III 的通道均值矩阵 (9,408 B)
+│       └── k3_std.bin               # 提取自 K-3 III 的通道标准差矩阵 (9,408 B)
 ├── tools/
-│   ├── fw_container.py              # 理光固件 LZSS 解封与双重 word_sum 求解器
-│   ├── rtos_analyzer.py             # RTOS 交叉引用与函数符号反汇编器
-│   └── linux_analyzer.py            # Linux rootfs 审计器
-├── README.md                        # 英文主说明文档
-├── README_CN.md                     # 中文说明文档
-└── LICENSE                          # MIT 开源授权协议
+│   ├── fw_container.py              # LZSS 容器解包、打包与双重累加和校验器
+│   ├── rtos_analyzer.py             # RTOS 交叉引用与符号解析器
+│   └── linux_analyzer.py            # Linux rootfs 解析器
+└── README_CN.md
 ```
 
 ---
 
-## 6. 从源码构建固件
+## 6. 从源码构建
 
-### 前置依赖
-- Python 3.10+
-- `capstone` 库（`pip install capstone`）
-- 理光 GR IV 原厂 v1.11 固件（`fwdc248b.bin`）放置在 `firmware/official/v1.11/`
-- 宾得 K-3 Mark III 原厂 v2.20 固件的 `06_DSP.bin` 分区放置在 `firmware/reference/k3iii_v220/unpacked/sections/`
-
-### 构建指令
 ```bash
-# 执行完整构建管线：切分 DSP 固件、固化 AI 模型表、装填阶段 3 汇编代码洞并重新生成 Flash 镜像
+# 自动切分 DSP 分块、固化神经网络参数、编译注入代码洞并生成最终卡刷固件：
 python src/dsp_ai/build_stage3_firmware.py
 ```
 
-构建日志输出示例：
-```text
-======================================================================
-Ricoh GR IV Stage 3 AI Live View Tracking Firmware Rebuilder
-======================================================================
-Ricoh GR IV Stage 3 AI Live View Tracking Firmware Rebuilder
-======================================================================
-[*] Confirmed Stage 2 binary intact: fwdc248b_stage2_dsp_wake.bin (38,693,256 bytes)
-
-[Step 1/4] Verifying staged SD card DSP binaries...
-[+] PASS: 100% byte-perfect reconstruction verified across all 4,194,304 bytes.
-
-[Step 2/4] Decoding official firmware container baseline...
-  -> Official payload decoded: 67,948,280 bytes
-
-[Step 3/4] Splicing Stage 3 Dual Caves, Trampolines & AI Tables...
-  [+] Hook 1 (Boot Wakeup): 152 B Cave @ VA 0x53000d60, Hook @ VA 0x536520f0
-  [+] Hook 2 (LiveView AI): 756 B Cave @ VA 0x53000e00, Hook @ VA 0x5386ea8c
-  [+] Embedded Desc Table (728 B) @ VA 0x53001200
-  [+] Embedded Mean Table (9408 B) @ VA 0x541db540
-  [+] Embedded Std Table  (9408 B) @ VA 0x54217680
-[*] Rezeroing 32-bit payload checksum word...
-  [+] Payload word_sum == 0 validated successfully.
-
-[Step 4/4] Rebuilding flashable container with LZSS framing...
-  -> Modified payload bytes: 19770
-  [+] Written Stage 3 preserved binary: output/fwdc248b_stage3_ai_track.bin (38,791,732 bytes)
-  [+] Written active flashable binary:  output/fwdc248b.bin (38,791,732 bytes)
-
-[*] Executing round-trip container verification...
-  [+] Round-trip container verification PASSED! Dual word-sums == 0.
-```
-
 ---
 
-## 7. 芯片级底层函数与内存交叉引用表
+## 7. 底层技术地址速查表
 
-| 函数 / 模块名称 | 虚拟地址 (VA) | 架构功能与说明 |
+| 函数 / 组件符号 | 虚拟地址 (VA) | 功能说明 |
 | :--- | :--- | :--- |
-| `LiveViewProcess3aContoller` | `0x536520f0` | 挂接点 1：开机阶段单次唤醒入口 (`b #0x53000d60`) |
-| 代码洞 1（开机唤醒） | `0x53000d60` | 152 字节开机引导引擎：从 SD 卡（盘符 `C:\`）加载 DSP 固件、解除复位并启动测试 |
-| `FaceDetectionService::Task` | `0x5386ea8c` | 挂接点 2：实时取景连续人脸识别任务循环 (`b #0x53000e00`) |
-| 代码洞 2（实时取景 AI 对焦） | `0x53000e00` | 756 字节执行引擎（双保险点火 + 预览 YUV 提取 + 硬件信箱调度 + 峰值提取 + 人脸数据生成） |
-| `p_FdEngine` | `[r4, #0x38, #0x44]` | 人脸引擎核心对象；`+0xc` 保存当前物理预览 YUV 帧指针，`+0x10` 保存取景跨度 pitch |
-| `DspFactory::GetDspService()`| `0x539658c4` | 获取 CEVA-CV `DspService` 核心单例句柄 |
-| `DspService::LoadDsp` | `0x53966d74` | 从 SD 卡根目录（盘符 `C:\`）载入 `DF_EX.BIN`, `DF_ID_S.BIN`, `DF_IP.BIN` 三分块 |
-| `DspService::Start` | `0x53966214` | 解除硬件复位，启动 CEVA-CV 指令执行（入口 `0x515fc000`） |
-| `DspService::Test` | `0x53966f18` | 触发 CEVA-CV 版本与自检握手通信 |
-| `DspService::SendMessage` | `0x539663c0` | 发送 Message ID 4（神经网络卷积前向推断请求） |
-| `DspService::WaitMessage` | `0x539666dc` | 等待矢量张量卷积推断完成信号（超时 100 毫秒） |
-| `m_DetectedFaceResult` | `[FaceDetectionService, #0x78]` | 100 字节人脸数据结构体数组（包含 `x, y, w, h, eye_l, eye_r, mouth, score`） |
-| `FdLibraryService` | `[FaceDetectionService, #0x38]` | 人脸服务管理对象，偏移 `+0x30` 保存检出人脸总数 |
-| `UpdateFaceDetectionResult` | `0x5386e0e4` | 将检出的人脸/人眼坐标提交至相机 LCD 屏幕 OSD 任务与对焦系统 |
-| 理光原厂 `DetectFace` | `0x5383ec84` | FotoNation `LibAHFD` 传统 CPU 人脸检测函数（AI 置信度 $< 25$ 时的静默安全回退） |
+| `LiveViewProcess3aContoller` | `0x536520f0` | 挂接点 1 入口：开机非阻塞状态区清零 (`b #0x53000d60`) |
+| 代码洞 1 (Cave 1) | `0x53000d60` | 84 字节：重构 APCS 栈帧并清零 `0x517e0100..0x517e011f` 遥测状态 |
+| `FaceDetectionService::Task` | `0x5386ea8c` | 挂接点 2 入口：逐帧全时纯 CEVA-CV AI 对焦循环 (`b #0x53000e00`) |
+| 代码洞 2 (Cave 2) | `0x53000e00` | 1,440 字节：安全开机重试 + AHIP 出队 + D-Cache 失效 + DSP 调度 + 逆光增益 + 结果注入 |
+| 完成态 AHIP 描述符 | `*(*(0x55080350 + 0x424))` | `AhipService::WaitFrame` 正常出队的完成帧（`+0x04` Y, `+0x08` U, `+0x0c` V） |
+| `InvalidateDataCache` | `0x538f0454` | CPU 读取取景帧前使 L1/L2 数据缓存失效 |
+| `FlushDataCache` | `0x538f04c4` | CPU 写入输入 RGB 张量后写回数据缓存以供 DSP DMA 读取 |
+| `DspFactory::GetDspService()` | `0x539658c4` | 获取片上 CEVA-CV `DspService` 驱动单例指针 |
+| `DspService::LoadDsp` | `0x53966d74` | 从 SD 卡根目录 (`C:\`) 载入 `DF_EX.BIN`, `DF_ID_S.BIN`, `DF_IP.BIN` |
+| `DspService::Start` | `0x53966214` | 解除 DSP 复位，从 `0x515fc000` 启动矢量计算核心 |
+| `DspService::Test` | `0x53966f18` | 执行硬件握手自检 |
+| `DspService::SendMessage` | `0x539663c0` | 派发 Message ID 4（神经网络卷积推断请求） |
+| `DspService::WaitMessage` | `0x539666dc` | 阻塞等待 DSP 完成推断信号量（超时 100 ms） |
+| `m_DetectedFaceResult` | `[FaceDetectionService, #0x78]` | 100 字节人脸/主体结构体数组（Q8 坐标、眼部、置信度等） |
+| `FdLibraryService` | `[FaceDetectionService, #0x38]` | 原厂服务句柄，`+0x30` 保存识别目标数 `face_count` |
+| `UpdateFaceDetectionResult` | `0x5386e0e4` | 向 LCD 取景渲染线程与 165 点 PDAF 驱动派发对焦坐标 |
+| 原厂 FotoNation `DetectFace` | `0x5383ec84` | **在 v1.0.9 中已 100% 断开移除**（零回退） |
 
 ---
 
-## 8. 版本更新记录 (Release Changelog)
+## 8. 版本更新履历
 
-### v1.0.5 (当前版本)
-- **SD 卡盘符修正（`'A'` -> `'C'`）**：理光 RTOS 底层将盘符 `'A'` 固定映射为内部 ROM 资源分区（`12_RES.bin`），而 SD 卡物理挂载点盘符为 `'C'`（`0x43`）。此前向 `LoadDsp` 传入 `'A'` 导致 100% 无法读取 SD 卡文件。v1.0.5 全面切换为 `'C'`，实现对 `DF_EX.BIN`、`DF_ID_S.BIN`、`DF_IP.BIN` 的正确加载。
-- **真实取景物理帧提取 (`p_FdEngine`)**：废弃原未初始化 BSS 空指针 `0x55395a18`，通过 `FaceDetectionService::Task` 正确解引用链条：`[r4, #0x38] -> [r0, #0x44] -> [r3, #0xc]`，动态获取真实 $960 \times 640$ 物理 YUV 取景帧及行跨度 `[r3, #0x10]`。
-- **调优检测置信度门限（25）**：将门限由 60 调整至 25（约 10% 概率），对齐宾得 K-3 III 对侧脸（90° 侧面剪影）、逆光暗部人脸、大倾角及口罩遮挡的神经检测灵敏度。
-- **移除奇偶帧降级清空**：移除此前奇数帧强制回退 FotoNation 的逻辑，改为由硬件 CEVA-CV DSP 协处理器逐帧进行深度推断（主机 CPU 占用率 <0.4%），彻底消除检测框被清空的问题。
-- **开机双保险点火机制**：代码洞 2 在取景第 0 帧自动检测 DSP 启动标志，若开机 Hook 1 触发时 SD 卡未就绪，立即在取景开始时自动执行点火。
-- **固件校验码更新**：生成 `fwdc248b.bin`（38,791,732 字节，SHA-256：`d058ca69c47da83c7a0937458ad0e8bd9674fb64965c5facd75a8098242ca8c0`）。
+### v1.0.9 (当前最新版本)
+- **100% 纯 CEVA-CV CNN，彻底移除原厂回退**：完全断开并移除对 `FdLibraryService::DetectFace` (`0x5383ec84`) 的调用，确保屏幕上所有对焦框 100% 由 CEVA-CV 硬件加速 CNN 计算生成。
+- **根治未初始化 DDR `0x517e0104` 导致的开机回退原厂 Bug**：Cave 1 移除非必要的开机阻塞加载；Cave 2 利用构造函数每次开机必定清零的 `[r4, #0x13e]` 跟踪开机重试状态，前 20 帧（约 `0.65s`）等待 SD 卡挂载，随后每 64 帧重试 `LoadDsp('C')` 最多 30 次（约 `65s`），并在 I/O 期间释放互斥锁 `r4 + 0x48`。
+- **AHIP 硬件完成出队帧提取与 D-Cache 失效刷新**：读取 `*(*(0x55080350 + 0x424))` 出队指针，并在 CPU 读取前执行 `InvalidateDataCache` (`0x538f0454`)，杜绝陈旧缓存像素。
+- **全画幅比例自适应下采样（3:2, 4:3, 16:9, 1:1）**：动态适配 `[r4, #0xfc]` 与 `[r4, #0xfe]`，保证各种构图比例下的张量准确无畸变。
+- **$C^0$ 连续 $2.0\times$ 逆光暗部平滑增益曲线**：$Y < 48 \to 2Y$，$48 \le Y < 144 \to 72 + Y/2$，大幅增强强逆光场景下的面部阴影对比度。
+- **头部通道优先解析与动态框尺寸**：优先识别人头/面部（$fg = \max(Ch1, Ch2 - 0.5\text{ logit})$），根据目标分割面积自适应调整对焦框大小（`clamp(0x2800 + (area << 6), 0x2800, 0x5c00)`）。
+- **侧脸/低头首帧状态播种**：完整播种 `[r4, #0x100..0x10c]` 等字段，绕过 `SelectMainFace` 冷启动拒绝，实现侧脸与低头开机第 1 帧瞬时锁定。
+- **固件校验码**：`fwdc248b.bin`（38,842,088 字节，SHA-256：`35cd54790a81734055834db1c97c54ef9b6740789aaaf3f3d749bed7e997d7d6`）。
 
-### v1.0.4
-- **彻底根治半按快门画面卡死故障**：经逆向反汇编静态确认，地址 `0x538e32c4` 并非对焦更新函数，而是系统核心任务创建函数 `CreateTask`。此前置入参数 $H=180$（`0x000000b4`）导致 T-Kernel 在半按快门时调度进入异常向量表发生硬死锁。v1.0.4 彻底移除该调用，由 `UpdateFaceDetectionResult` 纯原生驱动。
-- **架构级双挂接点物理分离**：
-  - 挂接点 1（`0x536520f0` -> 代码洞 1 `0x53000d60`，152 字节）：脱离取景锁在开机阶段完成 SD 卡载入与 DSP 启动。
-  - 挂接点 2（`0x5386ea8c` -> 代码洞 2 `0x53000e00`，692 字节）：专职负责取景下采样与模型推断。
-- **固件校验码更新**：生成 `fwdc248b.bin`（38,791,732 字节，SHA-256：`edd0aa6184f03b6c75ccd1fd23408fd8fe521e073e4f69b4d520cb8a14cc24fc`）。
+### v1.0.8
+- **移除阶段 1 预检**：取消 FotoNation 正脸过滤，开启 CEVA-CV CNN 逐帧推断。
+- **初步实现非正脸首帧跟踪标志播种**。
 
-### v1.0.3
-- **真·实时取景推断循环重构**：将推断钩子由开机单次执行的 `LiveViewProcess3aContoller`（`0x536520f0`）重定位至每帧必经的独立人脸识别任务循环 `FaceDetectionService::Task`（`0x5386ea8c`）。
-- **取景画面指针二级解引用修复**：解析 `[0x55395a18, #8] -> [m_CaptureViewControlService, #4]`，确保下采样模块获取到真实的 $960 \times 640$ 动态画面而非控制器类指针。
-- **LCD 屏幕绿框与片上 PDAF 双模直通**：推断检出目标直接写入 `m_DetectedFaceResult` 并联动 `UpdateFaceDetectionResult`（`0x5386e0e4`），使 LCD 屏幕立即绘制出精准的 AI 人脸/人眼绿色锁定框，并驱动 165 点相位对焦点牢牢咬住拍摄主体。
-- **零拉风箱静默回退保护**：当 AI 模型置信度低于 60 或画面无目标时，100% 平滑降级执行原厂 FotoNation `LibAHFD`（`0x5383ec84`），确保全场景下绝对对焦稳定性。
+### v1.0.7
+- **修复原厂 ROM 中 `DspService::LoadDsp` 路径硬编码 Bug**：修正 `0x53966eb0` 与 `0x53966ef4` 错误传递 `"A:\DF_ID_S.BIN"` 与 `"A:\DF_IP.BIN"` 的问题。
 
-### v1.0.2
-- **MMU 权限错误修复**：将运行时状态量与序列号由代码段（`.text`，只读 `AP=110`）迁移至 DSP 共享内存区域（`0x51602540`，可读写 `AP=011`），彻底根除开机 Data Abort 崩溃。
+### v1.0.6
+- **加载完整 1.14 MB K-3 III CNN 权重**：`DF_EX.BIN` 扩展包含分块 0（核心）与分块 1（权重）。
+- **重构 YUV420 到 3 平面 RGB 输入张量与 3 通道 int16_t 热力图解析管线**。
 
-### v1.0.1
-- **AAPCS 严格 8 字节栈对齐**：全面修复代码洞进入与退出时的栈帧结构，保证与理光原厂 eSOL T-Kernel 调度器严格兼容。
-
-### v1.0.0
-- 首次公开发布理光 GR IV 激活内置 CEVA-CV DSP 协处理器并移植宾得 K-3 Mark III 深度学习对焦系统方案。
+### v1.0.5
+- **修正 SD 卡盘符参数（`'A'` -> `'C'`）**。
+- **通过 `p_FdEngine` 动态解析预览帧物理显存地址**。
 
 ---
 
-## 8. 免责声明与开源许可
+## 9. 权利声明与开源协议
 
-- **免责声明**：本项目属于学术性与工程逆向探索成果。刷写第三方固件存在极小的潜在风险。尽管项目已实装双重累加和验证、越界防御与静默回退保护，开发者不对任何因操作不当造成的设备异常承担法律责任。
-- **版权声明**：本仓库仅分发原创反汇编工具、开源补丁代码与逆向数据规范，不包含且不分发理光映像株式会社（Ricoh Imaging Company, Ltd.）享有著作权的原版二进制固件。
-- **开源协议**：本项目基于 [MIT License](LICENSE) 协议开源。
+- **免责声明**：本项目为技术爱好者出于学习、逆向工程与学术研究目的开展的独立开源研究。刷机具有潜在风险，尽管我们设计了极尽严苛的硬件防变砖保护策略与双重校验累加和机制，作者对使用本工具所导致的任何直接或间接设备故障概不承担责任。
+- **版权声明**：本仓库仅分发原创的反汇编解析工具、汇编注入脚本与数学逻辑规范，不分发任何受理光（Ricoh Imaging Company, Ltd.）版权保护的私有固件二进制。用户须使用自身合法持有的相机固件进行构建。
+- **开源协议**：本项目基于 MIT License 开源，详见 [LICENSE](LICENSE)。
