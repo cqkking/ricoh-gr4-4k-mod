@@ -1,6 +1,7 @@
 {
-  "schema_version": 1,
-  "name": "Ricoh GR IV v1.11 4K UHD Video Recording (Native Engine Dispatch)",
+  "schema_version": 2,
+  "codec": "h264",
+  "name": "Ricoh GR IV v1.11 4K UHD H.264 Video Recording (Pentax K-3 III Parity)",
   "target": {
     "model": "GR IV Standard Edition",
     "firmware_version": "1.11",
@@ -9,76 +10,58 @@
   },
   "changes": [
     {
-      "id": "movie_process_framerate_to_4k_dispatch",
-      "description": "MovieProcess framerate-to-resolution dispatch: 24p/30p -> 4K UHD, 60p -> 1080p FHD",
-      "vaddr": "0x536f551c",
-      "offset": "0x70d22c",
-      "expected_hex": "1c20d1e50040a0e1003099e50150a0e11210d1e5847600e37826c0e5",
-      "replacement_hex": "0150a0e10040a0e1003099e51210d5e5012071e20020a0437826c0e5",
-      "length": 28
-    },
-    {
-      "id": "movie_process_offset_reg_fixup",
-      "description": "Relocate movw r7, #0x684 to replace unused mov r2, r3",
-      "vaddr": "0x536f5574",
-      "offset": "0x70d284",
-      "expected_hex": "0320a0e1",
-      "replacement_hex": "847600e3",
-      "length": 4
-    },
-    {
-      "id": "h264_codec_service_start_movie_session_dispatch",
-      "description": "H264CodecService::StartMovieSession framerate-to-resolution dispatch: 24p/30p -> 4K UHD VPU encoder, 60p -> 1080p FHD",
-      "vaddr": "0x5388dd70",
-      "offset": "0x8a5a80",
-      "expected_hex": "1c20d5e52c0094e5",
-      "replacement_hex": "012073e20020a043",
-      "length": 8
-    },
-    {
-      "id": "h264_codec_service_init_movie_session_dispatch",
-      "description": "H264CodecService::InitializeMovieSession framerate-to-resolution dispatch: 24p/30p -> 4K UHD VPU encoder, 60p -> 1080p FHD",
-      "vaddr": "0x5388e144",
-      "offset": "0x8a5e54",
-      "expected_hex": "1c20d5e52c0094e5",
-      "replacement_hex": "012073e20020a043",
-      "length": 8
-    },
-    {
-      "id": "mov_muxer_track_geometry_hook",
-      "description": "Real MOV Muxer Track & SampleEntry geometry hook at 0x538924dc -> branch to trampoline 0x53000d50",
-      "vaddr": "0x538924dc",
-      "offset": "0x8aa1ec",
-      "expected_hex": "682094e50c10a0e3",
-      "replacement_hex": "1bbaddea0000a0e1",
-      "length": 8
-    },
-    {
-      "id": "camera_property_is_4k_movie_hook",
-      "description": "CameraProperty::Is4KMovie hook at 0x5375cba4 -> branch to helper at 0x53000da0",
-      "vaddr": "0x5375cba4",
-      "offset": "0x7748b4",
-      "expected_hex": "003090e5e107d3e51eff2fe1",
-      "replacement_hex": "7d90e2ea0000a0e10000a0e1",
-      "length": 12
-    },
-    {
-      "id": "is_4k_movie_supported_hook",
-      "description": "LiveView Is4KMovieSupported hook at 0x53885bf0 -> branch to helper at 0x53000dc0",
+      "id": "is_debug_4k_movie_enable",
+      "description": "Enable native K-3 III 4K movie pipeline gate at LiveViewDebug::IsDebug4KMovie (mov r0, #1; bx lr)",
       "vaddr": "0x53885bf0",
       "offset": "0x89d900",
       "expected_hex": "0000a0e31eff2fe1",
-      "replacement_hex": "72ecddea0000a0e1",
+      "replacement_hex": "0100a0e31eff2fe1",
       "length": 8
     },
     {
-      "id": "engine_4k_trampoline_cave",
-      "description": "Unified 4K Engine Trampoline Cave (Track Geometry, Is4KMovie Helper, Is4KMovieSupported Bridge)",
-      "vaddr": "0x53000d50",
-      "offset": "0x18a60",
-      "expected_hex": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
-      "replacement_hex": "682094e54230d4e5000053e30700001a062c82e2003f00e370c800e3b439c2e1b6c9c2e1b43ec2e1b6cec2e1682094e50c10a0e3640094e5d64522ea0000000000000000000000000000000000000000003090e5da07d3e5010050e30100a0230000a0331eff2fe1000000000000000000482de915aa1ceb040090e5c55d1deb0088bde8",
-      "length": 132
+      "id": "lv_defect_a_cmp_60p",
+      "description": "LiveView 4K buffer check: cmp r0, #0 (test for 60p=0 instead of 30p=1)",
+      "vaddr": "0x5362e508",
+      "offset": "0x646218",
+      "expected_hex": "010050e3",
+      "replacement_hex": "000050e3",
+      "length": 4
+    },
+    {
+      "id": "lv_defect_a_beq_fhd",
+      "description": "LiveView 4K buffer branch: beq 0x5362e47c (only 60p=0 takes FHD path; 30p/24p take 4K path)",
+      "vaddr": "0x5362e510",
+      "offset": "0x646220",
+      "expected_hex": "d9ffff1a",
+      "replacement_hex": "d9ffff0a",
+      "length": 4
+    },
+    {
+      "id": "lv_defect_a_bool_is4k",
+      "description": "LiveView 4K flag argument: mov r3, #1 (pass boolean is4K=1 for both 30p and 24p)",
+      "vaddr": "0x5362e534",
+      "offset": "0x646244",
+      "expected_hex": "0530a0e1",
+      "replacement_hex": "0130a0e3",
+      "length": 4
+    },
+    {
+      "id": "lv_defect_b_struct_offset",
+      "description": "Align m_is4KLiveView reader offset [r3, #0x55e] -> [r3, #0x564] to match writer at 0x5362d480",
+      "vaddr": "0x53637e60",
+      "offset": "0x64fb70",
+      "expected_hex": "5e35d3e5",
+      "replacement_hex": "6435d3e5",
+      "length": 4
+    },
+    {
+      "id": "lv_defect_c_plan4_plan5_jt",
+      "description": "Redirect LiveViewSequencePlanner Plan 4 & Plan 5 assert stubs to Plan 3 (0x536498b0 CreateRecipeSequenceMov4kLcd)",
+      "vaddr": "0x536497f8",
+      "offset": "0x661508",
+      "expected_hex": "c4986453f8986453",
+      "replacement_hex": "b0986453b0986453",
+      "length": 8
     }
   ]
 }

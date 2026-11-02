@@ -1,0 +1,148 @@
+{
+  "schema_version": 2,
+  "codec": "hevc",
+  "name": "Ricoh GR IV v1.11 4K UHD HEVC/H.265 Video Recording (WAVE5xx + hvc1)",
+  "target": {
+    "model": "GR IV Standard Edition",
+    "firmware_version": "1.11",
+    "official_sha256": "c4e597c7c9ca1bc181b30e35139ed90a4fd876ddcca14f12be0e00b6702233ae",
+    "payload_bytes": 67948280
+  },
+  "changes": [
+    {
+      "id": "is_debug_4k_movie_enable",
+      "description": "Enable native K-3 III 4K movie pipeline gate at LiveViewDebug::IsDebug4KMovie (mov r0, #1; bx lr)",
+      "vaddr": "0x53885bf0",
+      "offset": "0x89d900",
+      "expected_hex": "0000a0e31eff2fe1",
+      "replacement_hex": "0100a0e31eff2fe1",
+      "length": 8
+    },
+    {
+      "id": "lv_defect_a_cmp_60p",
+      "description": "LiveView 4K buffer check: cmp r0, #0 (test for 60p=0 instead of 30p=1)",
+      "vaddr": "0x5362e508",
+      "offset": "0x646218",
+      "expected_hex": "010050e3",
+      "replacement_hex": "000050e3",
+      "length": 4
+    },
+    {
+      "id": "lv_defect_a_beq_fhd",
+      "description": "LiveView 4K buffer branch: beq 0x5362e47c (only 60p=0 takes FHD path; 30p/24p take 4K path)",
+      "vaddr": "0x5362e510",
+      "offset": "0x646220",
+      "expected_hex": "d9ffff1a",
+      "replacement_hex": "d9ffff0a",
+      "length": 4
+    },
+    {
+      "id": "lv_defect_a_bool_is4k",
+      "description": "LiveView 4K flag argument: mov r3, #1 (pass boolean is4K=1 for both 30p and 24p)",
+      "vaddr": "0x5362e534",
+      "offset": "0x646244",
+      "expected_hex": "0530a0e1",
+      "replacement_hex": "0130a0e3",
+      "length": 4
+    },
+    {
+      "id": "lv_defect_b_struct_offset",
+      "description": "Align m_is4KLiveView reader offset [r3, #0x55e] -> [r3, #0x564] to match writer at 0x5362d480",
+      "vaddr": "0x53637e60",
+      "offset": "0x64fb70",
+      "expected_hex": "5e35d3e5",
+      "replacement_hex": "6435d3e5",
+      "length": 4
+    },
+    {
+      "id": "lv_defect_c_plan4_plan5_jt",
+      "description": "Redirect LiveViewSequencePlanner Plan 4 & Plan 5 assert stubs to Plan 3 (0x536498b0 CreateRecipeSequenceMov4kLcd)",
+      "vaddr": "0x536497f8",
+      "offset": "0x661508",
+      "expected_hex": "c4986453f8986453",
+      "replacement_hex": "b0986453b0986453",
+      "length": 8
+    },
+    {
+      "id": "hevc_get_movie_codec_type",
+      "description": "MovieCodecConfig::GetMovieCodecType -> Cave T1 (4K UHD -> 1 HEVC, 1080p60 -> 0 H.264)",
+      "vaddr": "0x5388d6f8",
+      "offset": "0x8a5408",
+      "expected_hex": "0000a0e31eff2fe1",
+      "replacement_hex": "94cdddea0000a0e1",
+      "length": 8
+    },
+    {
+      "id": "hevc_rb_encode_4k_gate_bypass",
+      "description": "Unlock WAVE5xx hardware H.265 4K 30p/24p in RB_InitParam_Set_Encode (bne -> b 0x530f35f4)",
+      "vaddr": "0x530f35b4",
+      "offset": "0x10b2c4",
+      "expected_hex": "0e00001a",
+      "replacement_hex": "0e0000ea",
+      "length": 4
+    },
+    {
+      "id": "hevc_rb_decode_4k_gate_bypass",
+      "description": "Unlock WAVE5xx hardware H.265 4K in RB_InitParam_Set_Decode (bne -> b 0x530ff2f0)",
+      "vaddr": "0x530ff2cc",
+      "offset": "0x116fdc",
+      "expected_hex": "0700001a",
+      "replacement_hex": "070000ea",
+      "length": 4
+    },
+    {
+      "id": "hevc_create_movie_file_hvc1",
+      "description": "H264CodecService::CreateMovieFile -> Cave T2 (select MP4FLib qt+sowt+hvc1 ID=4 when HEVC)",
+      "vaddr": "0x5388e698",
+      "offset": "0x8a63a8",
+      "expected_hex": "4630d4e584000be5",
+      "replacement_hex": "b0c9ddea0000a0e1",
+      "length": 8
+    },
+    {
+      "id": "hevc_mov_driver_container_max_id",
+      "description": "MovDriver::CreateMovieFile allow MP4FLib container IDs 0..7 (cmp r1, #7)",
+      "vaddr": "0x538704cc",
+      "offset": "0x8881dc",
+      "expected_hex": "030051e3",
+      "replacement_hex": "070051e3",
+      "length": 4
+    },
+    {
+      "id": "hevc_mov_driver_container_passthrough",
+      "description": "MovDriver::CreateMovieFile pass container ID 0..7 directly to MP4FLib (movls ip, r1)",
+      "vaddr": "0x53870560",
+      "offset": "0x888270",
+      "expected_hex": "01c0d397",
+      "replacement_hex": "01c0a091",
+      "length": 4
+    },
+    {
+      "id": "hevc_start_decode_session_codec",
+      "description": "H264CodecService::StartDecodeSession -> Cave T3 (set is_h264 = m_codecType ^ 1)",
+      "vaddr": "0x5388e2a0",
+      "offset": "0x8a5fb0",
+      "expected_hex": "01c0a0e3",
+      "replacement_hex": "b6caddea",
+      "length": 4
+    },
+    {
+      "id": "hevc_configure_decode_alloc_codec",
+      "description": "MovDriver::ConfigureDecode -> Cave T4 (pass codec_type to RB_AllocMemory)",
+      "vaddr": "0x53871d3c",
+      "offset": "0x889a4c",
+      "expected_hex": "70304be5",
+      "replacement_hex": "133cdeea",
+      "length": 4
+    },
+    {
+      "id": "hevc_wave5_trampoline_cave",
+      "description": "Socionext WAVE5xx HEVC Trampoline Cave (T1 GetMovieCodecType, T2 hvc1 Muxer, T3/T4 Decode)",
+      "vaddr": "0x53000d50",
+      "offset": "0x18a60",
+      "expected_hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "replacement_hex": "000051e30100a0030000a0131eff2fe14630d4e5000053e30400801284000be54a3622ea00000000000000000000000046c0d4e501c02ce2453522ea000000000ac0d4e501c02ce270c04be5e7c321ea",
+      "length": 80
+    }
+  ]
+}

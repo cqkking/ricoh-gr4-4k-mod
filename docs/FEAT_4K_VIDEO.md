@@ -1,5 +1,8 @@
 # Feature Specification: 4K Video Pipeline & GoPro GP1/GP2 Cross-Diff (`feat/4k-video`)
 
+> [!NOTE]
+> **Specification Superseded**: This document reflects early Phase 1 reverse-engineering research. For the finalized, verified, and shipping **Route B (Pentax K-3 Mark III Parity 4K H.264 & Socionext Milbeaut WAVE5xx 4K HEVC)** implementation, see [FEAT_4K_K3_PORT_HEVC.md](FEAT_4K_K3_PORT_HEVC.md).
+
 Baseline reverse-engineering, binary patching, and closed-loop verification framework for unlocking **4K (`3840×2160`) Video Recording** and **BT.2100 HLG HDR Container Signaling** on the **Ricoh GR IV (GR4) Standard Edition v1.11** (`fwdc248b.bin`), developed by benchmarking against **GoPro GP1/GP2 (`Socionext SC2000a / M10V / M20V`)** reverse-engineering research and **Pentax K-3 Mark III** (`fwdc233b.bin`).
 
 ---

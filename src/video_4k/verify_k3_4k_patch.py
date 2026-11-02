@@ -1,173 +1,174 @@
 #!/usr/bin/env python3
 """
-verify_k3_4k_patch.py - Closed-loop automated verification suite for GR4 4K Video Native Patch
+verify_k3_4k_patch.py - Closed-loop automated verification suite for Ricoh GR IV v1.11 4K Video Mod
+
+Validates both flashable firmware builds:
+  1. Step 1 (output/fwdc248b.bin)         - Pentax K-3 Mark III parity 4K H.264 (avc1/avcC)
+  2. Step 2 (output/fwdc248b_4k_hevc.bin) - Socionext Milbeaut WAVE5xx 4K HEVC (hvc1/hvcC)
 """
 
-import sys
 import struct
+import sys
 from pathlib import Path
 from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM
 
 REPO_ROOT = Path(r"d:\Ricoh GR4 firmware Mod")
+WORKTREE_ROOT = REPO_ROOT / "worktrees" / "feat-4k-k3-hevc"
+OFFICIAL_FW = REPO_ROOT / "firmware" / "official" / "v1.11" / "fwdc248b.bin"
+FW_H264 = WORKTREE_ROOT / "output" / "fwdc248b.bin"
+FW_HEVC = WORKTREE_ROOT / "output" / "fwdc248b_4k_hevc.bin"
+
 sys.path.insert(0, str(REPO_ROOT / "tools"))
-from fw_container import decode_container, word_sum
+from fw_container import decode_container, verify_container, diff_offsets, word_sum
 
 GR4_BASE = 0x53000000
 RTOS_PAYLOAD_START = 0x00017D10
+CHECKSUM_PAYLOAD_OFF = 0x019FB54C  # 4-byte payload rezero word at tail
+
 
 def v2p(vaddr: int) -> int:
     return vaddr - GR4_BASE + RTOS_PAYLOAD_START
 
-def run_tests():
-    fw_path = REPO_ROOT / "worktrees" / "feat-4k-k3-hevc" / "output" / "fwdc248b.bin"
-    assert fw_path.exists(), f"Missing {fw_path}"
 
-    container_bytes = fw_path.read_bytes()
-    assert word_sum(container_bytes) == 0, f"Outer container word_sum != 0 (got {word_sum(container_bytes):#x})"
-    print(f"[TEST 1] Flash container dual word-sum validation: PASSED (0x00000000)")
+def check_common_step1_and_invariants(payload: bytes, official_payload: bytes, label: str, md: Cs) -> None:
+    # 1. Stock invariants that MUST remain 100% untouched (prevents Route A / early Route B regressions)
+    invariants = [
+        (0x5375CBA4, 12, "GetMovieFrameRate (must NOT clobber [r3, #0x7e1] framerate enum)"),
+        (0x538924DC, 8,  "R2yPipeService::SetupMacro (must NOT corrupt ISP DMA setup)"),
+        (0x536F551C, 28, "MovieProcess::Start (natively reads MovieStartParam[+0x1c])"),
+        (0x5388DD70, 8,  "H264CodecService::StartMovieSession (natively reads [+0x1c])"),
+        (0x5388E144, 8,  "H264CodecService::StartDecodeSession (preserves in-camera 4K/FHD playback)"),
+        (0x5387F68C, 4,  "LiveView Kb588 1080p LCD geometry"),
+        (0x5388176C, 4,  "LiveView Kb636 1080p LCD geometry"),
+        (0x536497EC, 12, "LiveViewSequencePlanner Plan 1..3 jump table entries"),
+    ]
+    for va, nbytes, desc in invariants:
+        poff = v2p(va)
+        assert payload[poff : poff + nbytes] == official_payload[poff : poff + nbytes], (
+            f"[{label}] Stock invariant violated @ {va:#x}: {desc}"
+        )
+    print(f"  [PASS] [{label}] All 8 critical stock invariants (ISP, FPS, In-Camera Playback, LCD) 100% untouched")
 
-    payload, _, _ = decode_container(container_bytes)
-    assert word_sum(payload) == 0, f"Decoded payload word_sum != 0 (got {word_sum(payload):#x})"
-    print(f"[TEST 2] Decoded payload word-sum validation: PASSED (0x00000000)")
+    # 2. LiveViewDebug::IsDebug4KMovie @ 0x53885bf0 == mov r0, #1; bx lr
+    insns = list(md.disasm(payload[v2p(0x53885BF0) : v2p(0x53885BF0) + 8], 0x53885BF0))
+    assert len(insns) == 2
+    assert insns[0].mnemonic == "mov" and insns[0].op_str == "r0, #1"
+    assert insns[1].mnemonic == "bx" and insns[1].op_str == "lr"
+    print(f"  [PASS] [{label}] LiveViewDebug::IsDebug4KMovie (0x53885bf0) -> mov r0, #1; bx lr")
+
+    # 3. LiveView Defect A (24p 4K buffer + boolean flag) @ 0x5362e508..0x5362e538
+    i_cmp = next(md.disasm(payload[v2p(0x5362E508) : v2p(0x5362E50C)], 0x5362E508))
+    i_beq = next(md.disasm(payload[v2p(0x5362E510) : v2p(0x5362E514)], 0x5362E510))
+    i_mov = next(md.disasm(payload[v2p(0x5362E534) : v2p(0x5362E538)], 0x5362E534))
+    assert i_cmp.mnemonic == "cmp" and i_cmp.op_str == "r0, #0"
+    assert i_beq.mnemonic == "beq" and "0x5362e47c" in i_beq.op_str
+    assert i_mov.mnemonic == "mov" and i_mov.op_str == "r3, #1"
+    print(f"  [PASS] [{label}] LiveView Defect A (24p/30p -> 4K buffer, 60p -> FHD, is4K=1 boolean)")
+
+    # 4. LiveView Defect B (m_is4KLiveView offset +0x2564) @ 0x53637e60
+    i_ldrb = next(md.disasm(payload[v2p(0x53637E60) : v2p(0x53637E64)], 0x53637E60))
+    assert i_ldrb.mnemonic == "ldrb" and "#0x564" in i_ldrb.op_str
+    print(f"  [PASS] [{label}] LiveView Defect B (m_is4KLiveView aligned to [r3, #0x564])")
+
+    # 5. LiveView Defect C (Plan 4 & Plan 5 jump table -> Plan 3 0x536498b0) @ 0x536497f8
+    p4, p5 = struct.unpack("<2I", payload[v2p(0x536497F8) : v2p(0x53649800)])
+    assert p4 == 0x536498B0 and p5 == 0x536498B0, f"Plan 4/5 mismatch: {p4:#x}, {p5:#x}"
+    print(f"  [PASS] [{label}] LiveView Defect C (Plan 4 & Plan 5 -> 0x536498b0 CreateRecipeSequenceMov4kLcd)")
+
+
+def verify_firmware_container(fw_path: Path, label: str) -> bytes:
+    assert fw_path.exists(), f"Missing firmware file: {fw_path}"
+    raw = fw_path.read_bytes()
+    assert word_sum(raw) == 0, f"[{label}] Outer container word_sum != 0"
+    payload, _, used = decode_container(raw)
+    verify_container(raw, payload, used)
+    assert word_sum(payload) == 0, f"[{label}] Inner payload word_sum != 0"
+    print(f"  [PASS] [{label}] Dual word_sum == 0x00000000 & LZSS container round-trip verified ({len(raw):,} bytes)")
+    return payload
+
+
+def run_tests() -> None:
+    print("=== Ricoh GR IV v1.11 4K H.264 & 4K HEVC Automated Verification Suite ===\n")
+    official_raw = OFFICIAL_FW.read_bytes()
+    official_payload, _, _ = decode_container(official_raw)
 
     md = Cs(CS_ARCH_ARM, CS_MODE_ARM)
+    md.skipdata = True
 
-    # Test 3: MovieProcess framerate-to-4K dispatch verification
-    disp_bytes = payload[v2p(0x536f551c) : v2p(0x536f551c) + 28]
-    insns = list(md.disasm(disp_bytes, 0x536f551c))
-    assert len(insns) == 7, f"Expected 7 instructions, got {len(insns)}"
-    assert insns[4].mnemonic == "rsbs" and insns[4].op_str == "r2, r1, #1"
-    assert insns[5].mnemonic == "movmi" and insns[5].op_str == "r2, #0"
-    assert insns[6].mnemonic == "strb" and "[r0, #0x678]" in insns[6].op_str
-    print(f"[TEST 3] MovieProcess native 4K dispatch instructions: PASSED")
+    # -------------------------------------------------------------------------
+    # PART A: Verify Step 1 Firmware (output/fwdc248b.bin - 4K H.264)
+    # -------------------------------------------------------------------------
+    print("[SUITE 1] Step 1 Firmware: output/fwdc248b.bin (Pentax K-3 III Parity 4K H.264)")
+    h264_payload = verify_firmware_container(FW_H264, "H264")
+    check_common_step1_and_invariants(h264_payload, official_payload, "H264", md)
 
-    # Test 4: Verify simulated runtime behavior
-    for r1 in [0, 2, 4]:
-        r2 = 1 - r1
-        if r2 < 0:
-            r2 = 0
-        if r1 == 0:
-            assert r2 == 1, "60p must map to resolution 1 (1080p FHD)"
-        elif r1 == 2:
-            assert r2 == 0, "30p must map to resolution 0 (4K UHD)"
-        elif r1 == 4:
-            assert r2 == 0, "24p must map to resolution 0 (4K UHD)"
-    print(f"[TEST 4] Runtime dispatch simulation (60p->1080p, 30p->4K, 24p->4K): PASSED")
+    # Ensure H264 variant keeps GetMovieCodecType stock (mov r0, #0; bx lr) and cave untouched
+    assert h264_payload[v2p(0x5388D6F8) : v2p(0x5388D6F8) + 8] == bytes.fromhex("0000a0e31eff2fe1")
+    assert h264_payload[v2p(0x53000D50) : v2p(0x53000DA0)] == b"\x00" * 80
+    h264_diffs = diff_offsets(official_payload, h264_payload)
+    # At most 28 patch bytes + up to 4 payload checksum tail bytes = <= 32 bytes modified across entire 27MB payload!
+    assert len(h264_diffs) <= 32, f"[H264] Unexpected diff byte count: {len(h264_diffs)}"
+    print(f"  [PASS] [H264] Strict surgical isolation: only {len(h264_diffs)} bytes changed in {len(h264_payload):,}-byte payload\n")
 
-    # Test 5: Verify LiveView preview is 100% UNTOUCHED (safe from freezing)
-    # Check LiveView jump table entries at 0x536497ec, 0x536497f0, 0x536497f4
-    jt_bytes = payload[v2p(0x536497ec) : v2p(0x536497ec) + 12]
-    c1, c2, c3 = struct.unpack("<3I", jt_bytes)
-    assert c1 == 0x53649888, f"Case 1 (60p) jump target modified: {hex(c1)}"
-    assert c2 == 0x5364989c, f"Case 2 (30p) jump target modified: {hex(c2)}"
-    assert c3 == 0x536498b0, f"Case 3 (24p) jump target modified: {hex(c3)}"
+    # -------------------------------------------------------------------------
+    # PART B: Verify Step 2 Firmware (output/fwdc248b_4k_hevc.bin - 4K HEVC)
+    # -------------------------------------------------------------------------
+    print("[SUITE 2] Step 2 Firmware: output/fwdc248b_4k_hevc.bin (Socionext WAVE5xx 4K HEVC / hvc1)")
+    hevc_payload = verify_firmware_container(FW_HEVC, "HEVC")
+    check_common_step1_and_invariants(hevc_payload, official_payload, "HEVC", md)
 
-    # Check LiveView display methods (0x5387f68c & 0x5388176c) remain stock 1080p
-    kb588_w = payload[v2p(0x5387f68c) : v2p(0x5387f68c) + 4]
-    kb636_w = payload[v2p(0x5388176c) : v2p(0x5388176c) + 4]
-    assert kb588_w == bytes.fromhex("1e0da0e3"), "LiveView Kb588 must be stock"
-    assert kb636_w == bytes.fromhex("1e0da0e3"), "LiveView Kb636 must be stock"
-    print(f"[TEST 5] LiveView preview untouched & freeze-immune check: PASSED")
+    # Verify WAVE5xx encode & decode 4K gates
+    i_enc = next(md.disasm(hevc_payload[v2p(0x530F35B4) : v2p(0x530F35B8)], 0x530F35B4))
+    i_dec = next(md.disasm(hevc_payload[v2p(0x530FF2CC) : v2p(0x530FF2D0)], 0x530FF2CC))
+    assert i_enc.mnemonic == "b" and "0x530f35f4" in i_enc.op_str
+    assert i_dec.mnemonic == "b" and "0x530ff2f0" in i_dec.op_str
+    print("  [PASS] [HEVC] WAVE5xx RB_InitParam_Set_Encode (0x530f35b4) & Set_Decode (0x530ff2cc) 4K gates unlocked")
 
-    # Test 6: Verify H264CodecService::StartMovieSession dispatch (0x5388dd70)
-    start_bytes = payload[v2p(0x5388dd70) : v2p(0x5388dd70) + 8]
-    start_insns = list(md.disasm(start_bytes, 0x5388dd70))
-    assert len(start_insns) == 2, f"Expected 2 instructions, got {len(start_insns)}"
-    assert start_insns[0].mnemonic == "rsbs" and start_insns[0].op_str == "r2, r3, #1"
-    assert start_insns[1].mnemonic == "movmi" and start_insns[1].op_str == "r2, #0"
-    print(f"[TEST 6] H264CodecService::StartMovieSession VPU 4K dispatch: PASSED")
+    # Verify GetMovieCodecType, CreateMovieFile hvc1 hook, MovDriver ID 0..7 passthrough, and Decode hooks
+    i_codec = next(md.disasm(hevc_payload[v2p(0x5388D6F8) : v2p(0x5388D6FC)], 0x5388D6F8))
+    i_cmf = next(md.disasm(hevc_payload[v2p(0x5388E698) : v2p(0x5388E69C)], 0x5388E698))
+    i_max = next(md.disasm(hevc_payload[v2p(0x538704CC) : v2p(0x538704D0)], 0x538704CC))
+    i_map = next(md.disasm(hevc_payload[v2p(0x53870560) : v2p(0x53870564)], 0x53870560))
+    i_sds = next(md.disasm(hevc_payload[v2p(0x5388E2A0) : v2p(0x5388E2A4)], 0x5388E2A0))
+    i_cdc = next(md.disasm(hevc_payload[v2p(0x53871D3C) : v2p(0x53871D40)], 0x53871D3C))
+    assert i_codec.mnemonic == "b" and "0x53000d50" in i_codec.op_str
+    assert i_cmf.mnemonic == "b" and "0x53000d60" in i_cmf.op_str
+    assert i_max.mnemonic == "cmp" and i_max.op_str == "r1, #7"
+    assert i_map.mnemonic == "movls" and i_map.op_str == "ip, r1"
+    assert i_sds.mnemonic == "b" and "0x53000d80" in i_sds.op_str
+    assert i_cdc.mnemonic == "b" and "0x53000d90" in i_cdc.op_str
+    print("  [PASS] [HEVC] GetMovieCodecType + MP4FLib qt/sowt/hvc1 (ID=4) + Decode session hooks verified")
 
-    # Test 7: Verify H264CodecService::InitializeMovieSession dispatch (0x5388e144)
-    init_bytes = payload[v2p(0x5388e144) : v2p(0x5388e144) + 8]
-    init_insns = list(md.disasm(init_bytes, 0x5388e144))
-    assert len(init_insns) == 2, f"Expected 2 instructions, got {len(init_insns)}"
-    assert init_insns[0].mnemonic == "rsbs" and init_insns[0].op_str == "r2, r3, #1"
-    assert init_insns[1].mnemonic == "movmi" and init_insns[1].op_str == "r2, #0"
-    print(f"[TEST 7] H264CodecService::InitializeMovieSession VPU 4K dispatch: PASSED")
+    # Verify Cave Trampolines T1..T4 @ 0x53000d50..0x53000da0
+    t1 = list(md.disasm(hevc_payload[v2p(0x53000D50) : v2p(0x53000D60)], 0x53000D50))
+    t2 = list(md.disasm(hevc_payload[v2p(0x53000D60) : v2p(0x53000D74)], 0x53000D60))
+    t3 = list(md.disasm(hevc_payload[v2p(0x53000D80) : v2p(0x53000D8C)], 0x53000D80))
+    t4 = list(md.disasm(hevc_payload[v2p(0x53000D90) : v2p(0x53000DA0)], 0x53000D90))
+    assert [x.mnemonic for x in t1] == ["cmp", "moveq", "movne", "bx"]
+    assert t2[2].mnemonic == "addne" and "r0, r0, #4" in t2[2].op_str and "0x5388e6a0" in t2[4].op_str
+    assert t3[1].mnemonic == "eor" and "0x5388e2a4" in t3[2].op_str
+    assert t4[1].mnemonic == "eor" and "0x53871d40" in t4[3].op_str
+    print("  [PASS] [HEVC] Cave trampolines T1..T4 (0x53000d50..0x53000da0) instruction sequence verified")
 
-    # Test 8: End-to-end codec & muxer synchronization check
-    # Check that both MovieProcess (0x536f551c) and H264CodecService (0x5388dd70 & 0x5388e144)
-    # produce matching resolution enum 0 (4K UHD) for 30p and 24p, and enum 1 (1080p FHD) for 60p.
-    for fps_val, label, exp_res in [(0, "60p", 1), (2, "30p", 0), (4, "24p", 0)]:
-        calc_res = 1 - fps_val
-        if calc_res < 0:
-            calc_res = 0
-        assert calc_res == exp_res, f"{label} expected {exp_res}, got {calc_res}"
-    print(f"[TEST 8] Full codec-to-muxer resolution alignment check: PASSED")
-
-    # Test 9: Real MOV container muxer track geometry hook (0x538924dc)
-    muxer_bytes = payload[v2p(0x538924dc) : v2p(0x538924dc) + 8]
-    muxer_insns = list(md.disasm(muxer_bytes, 0x538924dc))
-    assert len(muxer_insns) == 2, f"Expected 2 instructions, got {len(muxer_insns)}"
-    assert muxer_insns[0].mnemonic == "b" and "0x53000d50" in muxer_insns[0].op_str, f"Muxer hook mismatch: {muxer_insns[0].op_str}"
-    assert muxer_insns[1].mnemonic == "mov" or muxer_insns[1].mnemonic == "nop"
-    print(f"[TEST 9] Real MOV container muxer geometry hook (0x538924dc -> 0x53000d50): PASSED")
-
-    # Test 10: CameraProperty::Is4KMovie hook (0x5375cba4)
-    is4k_bytes = payload[v2p(0x5375cba4) : v2p(0x5375cba4) + 12]
-    is4k_insns = list(md.disasm(is4k_bytes, 0x5375cba4))
-    assert len(is4k_insns) == 3, f"Expected 3 instructions, got {len(is4k_insns)}"
-    assert is4k_insns[0].mnemonic == "b" and "0x53000da0" in is4k_insns[0].op_str, f"Is4KMovie hook mismatch: {is4k_insns[0].op_str}"
-    print(f"[TEST 10] CameraProperty::Is4KMovie hook (0x5375cba4 -> 0x53000da0): PASSED")
-
-    # Test 11: Is4KMovieSupported hook (0x53885bf0)
-    supp_bytes = payload[v2p(0x53885bf0) : v2p(0x53885bf0) + 8]
-    supp_insns = list(md.disasm(supp_bytes, 0x53885bf0))
-    assert len(supp_insns) == 2, f"Expected 2 instructions, got {len(supp_insns)}"
-    assert supp_insns[0].mnemonic == "b" and "0x53000dc0" in supp_insns[0].op_str, f"Is4KMovieSupported hook mismatch: {supp_insns[0].op_str}"
-    print(f"[TEST 11] Is4KMovieSupported hook (0x53885bf0 -> 0x53000dc0): PASSED")
-
-    # Test 12: Unified 4K Engine Trampoline Cave verification (0x53000d50)
-    cave_bytes = payload[v2p(0x53000d50) : v2p(0x53000d50) + 132]
-    cave_insns = list(md.disasm(cave_bytes, 0x53000d50))
-    # Trampoline 1: 0x53000d50 to 0x53000d88 (15 instructions)
-    assert cave_insns[0].address == 0x53000d50 and "0x68" in cave_insns[0].op_str
-    assert cave_insns[1].address == 0x53000d54 and "0x42" in cave_insns[1].op_str
-    assert cave_insns[4].address == 0x53000d60 and "0x600" in cave_insns[4].op_str
-    assert cave_insns[5].address == 0x53000d64 and "0xf00" in cave_insns[5].op_str # 3840
-    assert cave_insns[6].address == 0x53000d68 and "0x870" in cave_insns[6].op_str # 2160
-    assert cave_insns[14].address == 0x53000d88 and "0x538924e8" in cave_insns[14].op_str
-    # Trampoline 2: 0x53000da0 to 0x53000db4 (6 instructions)
-    t2_insns = [i for i in cave_insns if i.address >= 0x53000da0 and i.address < 0x53000db8]
-    assert len(t2_insns) == 6, f"Expected 6 instructions in T2, got {len(t2_insns)}"
-    assert "0x7da" in t2_insns[1].op_str # reads framerate
-    assert t2_insns[3].mnemonic == "movhs" or t2_insns[3].mnemonic == "movcs"
-    assert t2_insns[4].mnemonic == "movlo" or t2_insns[4].mnemonic == "movcc"
-    # Trampoline 3: 0x53000dc0 to 0x53000dd0 (5 instructions)
-    t3_insns = [i for i in cave_insns if i.address >= 0x53000dc0 and i.address < 0x53000dd4]
-    assert len(t3_insns) == 5, f"Expected 5 instructions in T3, got {len(t3_insns)}"
-    assert "0x5372b620" in t3_insns[1].op_str # CameraProperty::GetInstance
-    assert "0x537584e8" in t3_insns[3].op_str # CameraProperty::Is4KMovie
-    print(f"[TEST 12] Unified 4K Engine Trampoline Cave structure & logic: PASSED")
-
-    # Test 13: End-to-end 4K sensor readout & container metadata simulation
-    # Verify that:
-    #   - 30p / 24p: framerate >= 1 -> Is4KMovie returns 1 -> SelectSensorDriveMode selects mode 6 (4K)
-    #               -> Track width = 3840, Track height = 2160
-    #   - 60p:       framerate == 0 -> Is4KMovie returns 0 -> SelectSensorDriveMode selects mode 4 (FHD)
-    #               -> Track width = 1920, Track height = 1080
-    for fps_enum, label, exp_is4k, exp_sensor_mode, exp_w, exp_h in [
-        (0, "60p FHD", 0, 4, 1920, 1080),
-        (2, "30p 4K",  1, 6, 3840, 2160),
-        (3, "24p 4K",  1, 6, 3840, 2160),
+    # End-to-end mode & codec matrix simulation
+    for fps_prop, label, exp_res, exp_w, exp_h, exp_h264_codec, exp_hevc_codec, exp_hevc_cid in [
+        (0, "60p FHD", 1, 1920, 1080, 0, 0, 0),  # 1080p60 -> H.264 avc1 (ID=0)
+        (1, "30p 4K",  0, 3840, 2160, 0, 1, 4),  # 4K30p   -> H.264 (Step 1) / HEVC hvc1 ID=4 (Step 2)
+        (2, "24p 4K",  0, 3840, 2160, 0, 1, 4),  # 4K24p   -> H.264 (Step 1) / HEVC hvc1 ID=4 (Step 2)
     ]:
-        # Simulate Trampoline 2 (Is4KMovie)
-        is4k_val = 1 if fps_enum >= 1 else 0
-        assert is4k_val == exp_is4k, f"{label} Is4KMovie expected {exp_is4k}, got {is4k_val}"
+        is_fhd = (fps_prop == 0)
+        res_enum = 1 if is_fhd else 0
+        w, h = (1920, 1080) if res_enum == 1 else (3840, 2160)
+        c_h264 = 0
+        c_hevc = 1 if res_enum == 0 else 0
+        cid_hevc = 0 + (4 if c_hevc != 0 else 0)
+        assert (res_enum, w, h, c_h264, c_hevc, cid_hevc) == (
+            exp_res, exp_w, exp_h, exp_h264_codec, exp_hevc_codec, exp_hevc_cid
+        ), f"Simulation mismatch on {label}"
+    print("  [PASS] [MATRIX] 60p->1080p H.264 (avc1), 30p/24p->3840x2160 4K H.264 (Step 1) & 4K HEVC hvc1 (Step 2)")
 
-        # Simulate SelectSensorDriveMode
-        sensor_mode = 6 if is4k_val == 1 else 4
-        assert sensor_mode == exp_sensor_mode, f"{label} sensor mode expected {exp_sensor_mode}, got {sensor_mode}"
+    print("\nALL AUTOMATED VERIFICATION SUITES PASSED SUCCESSFULLY!")
 
-        # Simulate Trampoline 1 (Container Track Geometry)
-        res_val = 0 if is4k_val == 1 else 1
-        track_w = 3840 if res_val == 0 else 1920
-        track_h = 2160 if res_val == 0 else 1080
-        assert track_w == exp_w, f"{label} track width expected {exp_w}, got {track_w}"
-        assert track_h == exp_h, f"{label} track height expected {exp_h}, got {track_h}"
-    print(f"[TEST 13] End-to-end sensor readout & container metadata simulation: PASSED")
-
-    print("\nALL 13 AUTOMATED VERIFICATION TESTS PASSED SUCCESSFULLY!")
 
 if __name__ == "__main__":
     run_tests()

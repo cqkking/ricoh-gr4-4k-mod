@@ -1,112 +1,84 @@
-# Ricoh GR IV 4K Video Mod: Pentax K-3 III Splicing & GoPro GP2 HEVC Architecture Specification
+# Ricoh GR IV v1.11 4K Video Mod Specification (Route B: K-3 Mark III Parity 4K H.264 & WAVE5xx 4K HEVC)
 
 ## 1. 概述 (Executive Summary)
 
-本分支（`feat/4k-k3-hevc`）承接路线 B 的两步走战略：
-1. **第一步（4K H.264）**：以同门单反旗舰 **Pentax K-3 Mark III**（同属理光宾得映像株式会社，同为 Socionext Milbeaut 平台，原生支持 4K H.264）为标杆，实施内核级靶向移植与配方缝合，打通 GR IV 的原生 4K UHD（3840×2160）H.264 录像管线；
-2. **第二步（4K HEVC）**：借鉴同属 Socionext Milbeaut 体系的 **GoPro GP2 / GP1** 平台固件，提取硬件 Wave500 HEVC 编码器驱动规约，推进 4K HEVC 编码实现。
+本分支（`feat/4k-k3-hevc`）基于对 **Ricoh GR IV (`fwdc248b.bin` v1.11)**、**Pentax K-3 Mark III** 与 **GoPro GP2 (Socionext Milbeaut WAVE5xx)** 固件的完整逆向对齐，采用最小侵入式 **路线 B** 分两步实现原生 4K 视频录制：
+
+1. **Step 1 — Pentax K-3 Mark III 同级原生 4K H.264（`output/fwdc248b.bin`）**
+   - **帧率映射**：菜单选择 `30p` / `24p` 时自动启用原生 **4K UHD (`3840×2160`, `avc1`/`avcC`)** 录制（30p 平均 75 Mbps / 峰值 90 Mbps；24p 平均 60 Mbps / 峰值 72 Mbps）；选择 `60p` 保持原生 **1080p60 FHD (`1920×1080`)**。
+   - **真 4K 超采传感器读出**：激活原生 `SensorMode 0x12`（`4592×2584` 读出硬件缩放至 `3840×2160`），非 1080p 插值放大。
+   - **零冻屏取景与全平台回放**：修复 GR IV 遗留的 3 处 K-3 III 4K LiveView 对齐缺陷（Defect A/B/C），完整保留机内回放（`PlaybackH264Process`）、iPhone Air (iOS QuickTime) 与 Windows 原生播放兼容性。
+   - **极致手术隔离**：全固件 67.95 MB 解码载荷实际仅变动 **11 字节**（6 处原位补丁窗口共 28 字节），零代码洞依赖。
+
+2. **Step 2 — Socionext Milbeaut WAVE5xx 原生 4K HEVC / H.265（`output/fwdc248b_4k_hevc.bin`）**
+   - 在 Step 1 基础上唤醒 GR IV RTOS 内置的 Socionext Milbeaut **WAVE5xx 硬件 H.265 编解码器**（`RiberyM9M_Codec/FUNC/Movie/H265/WAVE`）与 `MP4FLib` 原生 **`qt + sowt + hvc1` (`hvcC`)** 封装路径。
+   - `30p` / `24p` 输出符合 Apple QuickTime 标准的 **`3840×2160` `hvc1` (`hvcC` 含硬件生成 VPS/SPS/PPS)** `.MOV`；`60p` 保持 `1080p60` H.264 (`avc1`)。
 
 ---
 
-## 2. 路线 A 历史失败根因复盘 (Route A Root Cause Analysis)
+## 2. 早期方案问题根因复盘 (Root-Cause Diagnosis)
 
-在早期尝试中，通过修改菜单分辨率表格或原地槽位替换后，真机录制的 MOV 文件经实测（`R0008484.MOV`）依然为 `1920×1080 24p @ 19.84 Mbps`。深入反汇编揭示了四个致命阻断点：
+对比本分支早期草稿（`7658e91`）与官方 `05_RTOS.bin` 反汇编，确认了此前导致取景异常、封装错位及**机内无法回放**的四大根因：
 
-1. **取景与录制链路混淆**：此前修改的跳转表 `0x536497E8` 仅属于背屏取景器（`LiveViewSequencePlanner.cpp`），根本不是视频录制与 Milbeaut 硬件编码链路；
-2. **4K 取景配方断言截断**：理光官方固件中，4K 配方入口 `CreateRecipeSequenceMov4kExt`（Plan 4 @ `0x536498c4`）被物理剔除，留下的是直接报错退出进程的断言桩（`assert_failed` @ `0x538ed930`）；
-3. **菜单槽位误绑**：官方菜单仅注册了 1080p 24p/60p/30p，底层对应的 `m_movieResEnum` 被写死在 1080p 索引（`r2 == 0`），导致录制引擎从未进入 4K 分支。
-
----
-
-## 3. 重大逆向突破：GR IV 原生内置的 4K 沉睡引擎
-
-在反汇编对齐 Pentax K-3 III（加载基址 `0x52500000`）与 Ricoh GR IV（加载基址 `0x53000000`）的过程中，我们发现了一个决定性的事实：
-
-> **理光 GR IV 的 `MovieProcess` 内核早已完整编译了 4K 录像分辨率与单帧 12.53MB 缓冲区！**
-
-### 3.1 分辨率查找表（`0x53871ef4` 与 `0x53871f34`）
-```arm
-0x53871f0c: cmp      r2, #3
-0x53871f10: moveq    r0, #0xf00      ; 3840 像素 (4K Width)
-0x53871f14: movne    r0, #0x780      ; 1920 像素 (1080p Width)
-...
-0x53871f54: cmp      r2, #3
-0x53871f58: movw     r0, #0x438      ; 1080 像素 (1080p Height)
-0x53871f5c: moveq    r0, #0x870      ; 2160 像素 (4K Height)
-```
-
-### 3.2 帧缓冲区分配表（`0x53871fbc`）
-```arm
-0x53871fd4: cmp      r2, #3
-0x53871fd8: mov      r0, #0x4000
-0x53871fdc: movt     r0, #0xbf       ; 0x00BF4000 = 12,533,760 字节 = 12.53 MB (4K NV12)!
-0x53871fe0: movne    r0, #0x300000   ; 0x00300000 = 3,145,728 字节 = 3.14 MB (1080p NV12)!
-```
-
-### 3.3 环形缓冲池扩展（`0x538715dc`）
-```arm
-0x538715dc: cmp      r1, #0
-0x538715e0: movne    r0, #0xc00000   ; 12 MB 录像环形池 (4K)
-0x538715e4: moveq    r0, #0x100000   ; 1 MB (普通录像)
-```
-
-**结论**：只要 `m_movieResEnum == 0`（即解析映射为 `r2 == 3`），GR IV 录像引擎会**自动输出 3840×2160 分辨率并自动分配 12.53MB 缓冲区**！
-**唯一的崩溃阻断点**，是按下录像键时由 `LiveViewSequencePlanner` 执行 Plan 4 时触发了 `0x536498ec` 处的 `assert_failed` 报错！
+1. **误改 `0x5375cba4` (`GetMovieFrameRate`)**：该函数读取 `[r3, #0x7e1]`（`0`=60p, `1`=30p, `2`=24p），强行覆盖为布尔返回值会破坏全局帧率状态机。
+2. **误改 `0x538924dc` (`R2yPipeService::SetupMacro`)**：该函数实为 ISP R2Y DMA 宏初始化而非 MOV 封装模板。`MP4FLib` 的 `tkhd` 与 `stsd` 宽高及 `avcC`/`hvcC` 均直接取自硬件编码器码流头，无需手工篡改内存偏移。
+3. **误改 `0x5388e144` (`H264CodecService::StartDecodeSession`) 导致机内回放损坏**：`0x5388e0f4` 仅由 `PlaybackH264Process.cpp` (`0x536c3ed4`) 调用用于**机内视频回放**！官方固件在 `0x536c34e4` 已原生支持识别 `3840×2160` (`r6=0`) 并分配 `12.53 MB` (`0x00BF4000`) 4K 解码缓冲，且将分辨率枚举存入 `[r5, #0x1c]`。此前将 `0x5388e144` 改为读取帧率字段直接破坏了机内回放！保持 `0x5388e144` 原厂未动即可完美支持机内 4K 与 1080p 回放。
+4. **遗漏 K-3 III 移植到 GR IV 时的 3 处 LiveView 4K 缺陷**：见下节 Defect A / B / C。
 
 ---
 
-## 4. 靶向缝合方案与蹦床代码注入 (Targeted Splicing & Trampoline)
+## 3. Step 1 补丁清单：Pentax K-3 III 同级 4K H.264 (`output/fwdc248b.bin`)
 
-为了避免整体模块移植引发外设不兼容死机，我们采用了**靶向缝合（Targeted Splicing）**技术：
+| 补丁 ID | 虚拟地址 | 长度 | 原厂字节 $\rightarrow$ 补丁字节 | 功能说明 |
+| :--- | :--- | :---: | :--- | :--- |
+| `is_debug_4k_movie_enable` | `0x53885bf0` | 8B | `0000a0e3 1eff2fe1` $\rightarrow$ `0100a0e3 1eff2fe1` | `LiveViewDebug::IsDebug4KMovie` 返回 `1`，自动打通 4K 传感器模式 `0x12`、`MovieStartParam[+0x1c]`、VPU 4K 缓冲与 `MP4FLib` |
+| `lv_defect_a_cmp_60p` | `0x5362e508` | 4B | `010050e3` $\rightarrow$ `000050e3` | Defect A：`cmp r0, #0`（检测 `60p == 0`，避免 `24p == 2` 误入 FHD 分支） |
+| `lv_defect_a_beq_fhd` | `0x5362e510` | 4B | `d9ffff1a` $\rightarrow$ `d9ffff0a` | Defect A：`beq 0x5362e47c`（仅 `60p` 走 FHD 取景缓冲，`30p`/`24p` 均走 4K 取景） |
+| `lv_defect_a_bool_is4k` | `0x5362e534` | 4B | `0530a0e1` $\rightarrow$ `0130a0e3` | Defect A：`mov r3, #1`（向 `0x538874f8` 传入标准布尔值 `is4K = 1`） |
+| `lv_defect_b_struct_offset` | `0x53637e60` | 4B | `5e35d3e5` $\rightarrow$ `6435d3e5` | Defect B：修正 K-3 III 遗留结构体偏移 `[r3, #0x55e]` $\rightarrow$ `[r3, #0x564]`，对齐 `0x5362d480` 写入点 |
+| `lv_defect_c_plan4_plan5_jt` | `0x536497f8` | 8B | `c4986453 f8986453` $\rightarrow$ `b0986453 b0986453` | Defect C：将 `LiveViewSequencePlanner` Plan 4 & Plan 5 断言桩重定向至有效 4K 配方 Plan 3 (`0x536498b0`) |
+
+---
+
+## 4. Step 2 补丁清单：WAVE5xx 4K HEVC / `hvc1` (`output/fwdc248b_4k_hevc.bin`)
+
+在完整包含 Step 1 全部补丁的基础上，追加以下 WAVE5xx H.265 硬件编解码与 `MP4FLib` `hvc1` 封装补丁：
 
 ```mermaid
-flowchart TD
-    A["LiveViewSequencePlanner::Plan"] -->|Plan 4 选中| B["0x536498c4 (原 assert_failed)"]
-    B -->|b #0x53000e00 (蹦床跳转)| C["0x53000e00 (代码洞 CAVE)"]
-    subgraph CAVE["0x53000e00 注入区 (4.7KB 自由空闲区)"]
-        D["注入 Pentax K-3 III Plan 4 4K 配方 (28 条指令)"]
-        D --> E["配置 ISP/DMA 帧宽、行高、消隐与时钟 (0x9f4..0xa38, 0xc..0x38)"]
-        E --> F["movw r5, #0x1944 / movt r5, #0x53eb (恢复规划器上下文)"]
-    end
-    F -->|b #0x53649840 (安全跳回)| G["0x53649840 (GR4 规划器后续统一收口流程)"]
-    G --> H["硬件建立 3840x2160 流水线并正常录制"]
+flowchart LR
+    A["MovieCodecConfig::GetMovieCodecType<br/>0x5388d6f8 -> Cave T1"] -->|"4K (r1==0) -> 1 (HEVC)<br/>60p (r1!=0) -> 0 (H.264)"| B["H264CodecService::StartMovieSession<br/>m_codecType @ [r4, #0x46]"]
+    B -->|"is_h264 = m_codecType ^ 1"| C["MovDriver::ConfigureEncode<br/>RB_Encode_AllocMemory + RB_InitParam_Set_Encode"]
+    C -->|"0x530f35b4 Gate Bypass<br/>res_id=0x0d (3840x2160)"| D["Socionext WAVE5xx H.265 VPU<br/>VPS + SPS + PPS + HEVC Slices"]
+    B -->|"0x5388e698 -> Cave T2 (+4)<br/>0x538704cc / 0x53870560"| E["MP4FLib Container ID=4<br/>qt + sowt + hvc1 (hvcC)"]
+    D --> E
 ```
 
-### 4.1 注入代码清单
-- **蹦床入口** (`0x536498c4`)：`b #0x53000e00` + NOP 填充。
-- **CAVE 执行体** (`0x53000e00`)：
-  - 执行 Pentax K-3 III 在 `0x52d4097c` 处的 28 条 4K 寄存器初始化指令；
-  - 设置 `r5 = 0x53eb1944`；
-  - `b #0x53649840` 跳回 GR IV 的通用收口流程。
+| 补丁 ID | 虚拟地址 | 长度 | 说明 |
+| :--- | :--- | :---: | :--- |
+| `hevc_get_movie_codec_type` | `0x5388d6f8` | 8B | 跳转 Cave T1 (`0x53000d50`)：`r1 == 0` (4K 30p/24p) 返回 `1` (HEVC)，`r1 != 0` (1080p60) 返回 `0` (H.264) |
+| `hevc_rb_encode_4k_gate_bypass` | `0x530f35b4` | 4B | `RB_InitParam_Set_Encode`：`0e00001a` (`bne`) $\rightarrow$ `0e0000ea` (`b 0x530f35f4`)，解除 WAVE5xx HEVC 软件 1080p60 限制，放行 `res_id=0x0d` (`3840×2160` 30p/24p) |
+| `hevc_rb_decode_4k_gate_bypass` | `0x530ff2cc` | 4B | `RB_InitParam_Set_Decode`：`0700001a` (`bne`) $\rightarrow$ `070000ea` (`b 0x530ff2f0`)，解除 WAVE5xx HEVC 解码 4K 门控 |
+| `hevc_create_movie_file_hvc1` | `0x5388e698` | 8B | 跳转 Cave T2 (`0x53000d60`)：当 `m_codecType == 1` 时将容器 ID `+4`（`0` `qt+sowt+avc1` $\rightarrow$ `4` `qt+sowt+hvc1`） |
+| `hevc_mov_driver_container_max_id` | `0x538704cc` | 4B | `MovDriver::CreateMovieFile`：`cmp r1, #3` $\rightarrow$ `cmp r1, #7`，允许容器 ID `0..7` |
+| `hevc_mov_driver_container_passthrough` | `0x53870560` | 4B | `MovDriver::CreateMovieFile`：`ldrbls ip, [r3, r1]` $\rightarrow$ `movls ip, r1`，直通 `hvc1` 容器 ID 至 `MP4FLib` |
+| `hevc_start_decode_session_codec` | `0x5388e2a0` | 4B | `StartDecodeSession` 跳转 Cave T3 (`0x53000d80`)：按 `m_codecType ^ 1` 动态传递 `is_h264` |
+| `hevc_configure_decode_alloc_codec` | `0x53871d3c` | 4B | `ConfigureDecode` 跳转 Cave T4 (`0x53000d90`)：向 `RB_AllocMemory` 传递解码 `codec_type` |
+| `hevc_wave5_trampoline_cave` | `0x53000d50` | 80B | 注入 T1..T4 蹦床代码至 `05_RTOS.bin` 头部全零空闲可执行段 (`0x53000d50..0x53000da0`) |
 
 ---
 
-## 5. GoPro GP2 Socionext HEVC 协议资产 (Phase 2)
+## 5. 构建、验证与刷机指南 (Build, Verify & Flash)
 
-从 GoPro HERO10 (GP2) 和 HERO8 (GP1) 提取的符号与驱动规约证实其与 GR IV 的 Socionext 芯片完全共享 Wave500 硬件核心：
-- `H265_Wave_Initialize`
-- `H265_Wave_EncOpen`
-- `H265_Wave_EncGetInitialInfo`
-- `H265_Wave_EncGiveCommand` (AXI / HEADER / ENC_SET_TEMP_QUEUE_IDX / ENC_SET_SEI_NAL_DATA / ENC_SET_PARA_CHANGE)
-- `H265_Wave_EncRegisterFrameBuffer` / `H265_Wave_EncAllocateFrameBuffer`
-- `H265_Wave_EncStartOneFrame`
+### 5.1 构建与闭环校验命令
+```powershell
+python src/video_4k/build_4k_firmware.py --codec all
+python src/video_4k/verify_k3_4k_patch.py
+```
+两个固件包均通过 **内外双层 32-bit `word_sum == 0x00000000` 校验** 与 **LZSS 容器无损往返校验 (`verify_container`)**。
 
-相关命令集已封装于 `src/video_4k/gp2_hevc_protocol.py`，待 4K H.264 跑通后无缝切入。
-
----
-
-## 6. 工具链与自动化验证 (Toolchain & Verification)
-
-### 6.1 工具脚本
-- `src/video_4k/k3_recipe_extractor.py`: 从 K-3 III 固件提取并反汇编 Plan 4 4K 配方序列。
-- `src/video_4k/k3_gr4_4k_patcher.py`: 自动生成注入补丁并输出 `analysis/05_RTOS_4k_patched.bin`。
-- `src/video_4k/verify_k3_4k_patch.py`: 5 项自动化闭环验证测试套件。
-- `src/video_4k/gp2_hevc_protocol.py`: GoPro GP2 Socionext HEVC 协议规约参考。
-
-### 6.2 闭环测试验证结果
-运行 `python src/video_4k/verify_k3_4k_patch.py` 结果全部通过：
-1. **Section size parity check**: PASSED (`20,785,856` 字节无形变)
-2. **Trampoline branch to 0x53000e00**: PASSED
-3. **Cave return branch to 0x53649840**: PASSED
-4. **Cave payload instruction count (32 insns)**: PASSED
-5. **Strict isolation check (45 modified words, 0 unauthorized)**: PASSED
+### 5.2 刷机与实机验证步骤
+1. **推荐先刷入 Step 1（4K H.264）验证**：将 `output/fwdc248b.bin` 复制到格式化后的 SD 卡根目录（文件名必须为 `fwdc248b.bin`），满电状态下按住 **Menu 键 + 开机** 执行升级。
+2. 开机切入视频模式：
+   - 设置帧率为 **`30p`** 或 **`24p`**：验证背屏取景流畅无冻屏，录制视频后检查机内回放、Windows 与 iPhone Air 播放正常，分辨率为 **`3840×2160` (`H.264 / avc1`)**。
+   - 设置帧率为 **`60p`**：验证正常录制 **`1920×1080` 60fps**。
+3. **进阶刷入 Step 2（4K HEVC）验证**：将 `output/fwdc248b_4k_hevc.bin` 重命名为 SD 卡根目录下的 `fwdc248b.bin` 刷入，在 `30p` / `24p` 下录制并验证生成 **`3840×2160` (`HEVC / hvc1`)** `.MOV` 文件。
