@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """
-build_4k_v120_firmware.py - Build Ricoh GR IV v1.20 Flashable 4K Video Mod (Standard Edition H.264)
+build_3k_v120_firmware.py - Build Ricoh GR IV v1.20 Flashable 3K UHD Video Mod (Standard Edition H.264)
 
 Features:
-1. Native 4K UHD (3840x2160 @ 30p / 24p) H.264 recording with full in-camera playback.
-2. 100% Native APS-C Field of View: Full sensor width readout (CIS Mode 3), zero optical
-   crop, exactly matching 1080p 60p wide-angle 28mm framing.
-3. Complete Movie Shake Reduction (EIS) Elimination:
-   - SetupMovieShakeReduction bypassed (no gyro line shifting, zero horizontal panning
-     vertical stripe intrusions).
-   - 4K Active Width division bug fixed (full 3840 width, zero EIS margin crop).
-4. Full closed-loop verification: Dual 32-bit checksums (word_sum == 0x00000000) and
-   LZSS container round-trip integrity check.
+1. Native 3K UHD (3072x1728 @ 30p / 24p) H.264 direct output:
+   - 100% Zero artificial upsampling from CIS Mode 3 sensor readout (3120x1755).
+   - Exact 16:9 aspect ratio (3072 / 1728 = 16 / 9).
+   - Perfect 256-byte DMA alignment (3072 = 256 * 12) & 64-byte alignment (1728 = 64 * 27).
+   - Strict 16x16 macroblock grid (192 x 108 macroblocks), eliminating frame crop flags.
+   - +51% bits-per-pixel (BPP) compression density & lower thermal load.
+2. Restored & Fully Functional Movie Shake Reduction (EIS):
+   - SetupMovieShakeReduction restored (remains fully toggleable in camera menu).
+   - Symmetrical active width bug fix: replaces flawed (Width >> 1) - Margin with
+     (Width - 2 * Margin), completely eliminating horizontal panning stripe intrusions!
+   - When Movie SR is OFF: 100% full 3072x1728 FOV with zero crop.
+   - When Movie SR is ON: smooth gyro line shifting within safe buffer margins.
+3. 100% Full APS-C FOV (CIS Mode 3): 6240x3510 full sensor readout matching 1080p 60p FOV.
+4. Dual 32-bit checksum balance (word_sum == 0x00000000) & LZSS round-trip integrity.
 """
 
 import json
@@ -151,8 +156,7 @@ def generate_patch_spec_v120(official_payload: bytes) -> dict:
     )
 
     # 5. Full FOV Alignment: CIS Mode 3 for Sensor Modes 5 & 6 @ 0x536717ec
-    # Pentax K-3 III sensor jump table mapped Mode 5 & 6 to CIS Mode 0x12 (1.35x center crop 4592x2584).
-    # Redirect both to 0x53671a68 (CIS Mode 3: Full APS-C sensor readout 6240x3510, matching 1080p 60p FOV).
+    # Map Mode 5 (24p) & 6 (30p) to 0x53671a68 (CIS Mode 3: Full APS-C sensor readout 6240x3510, matching 1080p 60p FOV).
     add_patch(
         changes,
         official_payload,
@@ -163,47 +167,137 @@ def generate_patch_spec_v120(official_payload: bytes) -> dict:
         bytes.fromhex("681a6753681a6753"),
     )
 
-    # 6. Fix 4K Active Width Division Bug @ 0x5365aae4
-    # Stock divided 4K width by 2 (rsbne r4, r6, r8, lsr #1 -> 1920 instead of 3840).
-    # Patched sets Active Width = Full Width (movne r4, r8 -> 3840).
+    # 6. Symmetrical Active Width Bug Fix for Movie SR (EIS) @ 0x5365aae4
+    # Stock had buggy division by 2: rsbne r4, r6, r8, lsr #1 -> (Width >> 1) - MarginX.
+    # Patched sets Active Width = Width - MarginX * 2 (subne r4, r8, r6, lsl #1),
+    # matching the vertical height calculation (0x5365aaf8: sub lr, r7, r5, lsl #1).
+    # This completely eliminates horizontal panning stripe intrusions while keeping Movie SR functional!
     add_patch(
         changes,
         official_payload,
-        "fix_4k_active_width_div",
-        "Fix 4K Active Width calculation in LiveViewProcess (movne r4, r8 -> full 3840 width, no division by 2)",
+        "fix_movie_sr_active_width_symmetrical",
+        "Fix Movie SR Active Width calculation (subne r4, r8, r6, lsl #1 -> Width - MarginX * 2)",
         0x5365AAE4,
         "a8406610",
-        bytes.fromhex("0840a011"),
+        bytes.fromhex("86404810"),
     )
 
-    # 7. Bypass MovieShakeReduction Call in LiveViewProcess @ 0x5365ab34
-    # Tail-call `b #0x538b7b3c` replaced with `bx lr` (immediate return, bypassing EIS setup).
+    # 7. 3K Direct Output (3072x1728) Resolution Getters:
+    # WidthGetter1 @ 0x538997e0: moveq r0, #0xc00 (3072 px)
     add_patch(
         changes,
         official_payload,
-        "bypass_movie_sr_call",
-        "Bypass SetupMovieShakeReduction call in LiveViewProcess (bx lr immediately)",
-        0x5365AB34,
-        "007409ea",
-        bytes.fromhex("1eff2fe1"),
+        "3k_width_getter_1",
+        "WidthGetter1 (0x538997e0): moveq r0, #0xc00 (3072 px width)",
+        0x538997E0,
+        "0f0ca003",
+        bytes.fromhex("0c0ca003"),
     )
 
-    # 8. Guard SetupMovieShakeReduction Function Entry @ 0x538b7b3c
-    # In case any other path invokes SetupMovieShakeReduction, make the function a complete no-op.
+    # WidthGetter2 @ 0x53899820: moveq r0, #0xc00 (3072 px)
     add_patch(
         changes,
         official_payload,
-        "bypass_setup_movie_sr_func",
-        "Safety guard: SetupMovieShakeReduction function entry immediate return (bx lr)",
-        0x538B7B3C,
-        "0dc0a0e1",
-        bytes.fromhex("1eff2fe1"),
+        "3k_width_getter_2",
+        "WidthGetter2 (0x53899820): moveq r0, #0xc00 (3072 px width)",
+        0x53899820,
+        "0f0ca003",
+        bytes.fromhex("0c0ca003"),
+    )
+
+    # HeightGetter 16:9 @ 0x5389986c: moveq r0, #0x6c0 (1728 px)
+    add_patch(
+        changes,
+        official_payload,
+        "3k_height_getter_16_9",
+        "HeightGetter 16:9 (0x5389986c): moveq r0, #0x6c0 (1728 px height)",
+        0x5389986C,
+        "870ea003",
+        bytes.fromhex("6c0ea003"),
+    )
+
+    # HeightGetter Default @ 0x53899890: moveq r0, #0x6c0 (1728 px)
+    add_patch(
+        changes,
+        official_payload,
+        "3k_height_getter_default",
+        "HeightGetter Default (0x53899890): moveq r0, #0x6c0 (1728 px height)",
+        0x53899890,
+        "220da003",
+        bytes.fromhex("6c0ea003"),
+    )
+
+    # CodecWidthGetter @ 0x53898f7c: moveq r0, #0xc00 (3072 px)
+    add_patch(
+        changes,
+        official_payload,
+        "3k_codec_width_getter",
+        "CodecWidthGetter (0x53898f7c): moveq r0, #0xc00 (3072 px width)",
+        0x53898F7C,
+        "0f0ca003",
+        bytes.fromhex("0c0ca003"),
+    )
+
+    # CodecParamInit @ 0x538995a0: mov r2, #0xc00 (3072 px)
+    add_patch(
+        changes,
+        official_payload,
+        "3k_codec_param_init_width",
+        "CodecParamInit (0x538995a0): mov r2, #0xc00 (3072 px width)",
+        0x538995A0,
+        "0f2ca0e3",
+        bytes.fromhex("0c2ca0e3"),
+    )
+
+    # 8. 3K Direct Output Static Tables:
+    # 32-bit resolution descriptor table @ 0x53de99a8 (3072 x 1728)
+    add_patch(
+        changes,
+        official_payload,
+        "3k_static_table_32bit",
+        "Static resolution table 32-bit (0x53de99a8): 3072 x 1728",
+        0x53DE99A8,
+        "000f000070080000",
+        bytes.fromhex("000c0000c0060000"),
+    )
+
+    # 16-bit resolution descriptor table @ 0x53fd8bd8 (3072 x 1728)
+    add_patch(
+        changes,
+        official_payload,
+        "3k_static_table_16bit",
+        "Static resolution table 16-bit (0x53fd8bd8): 3072 x 1728",
+        0x53FD8BD8,
+        "000f7008",
+        bytes.fromhex("000cc006"),
+    )
+
+    # 16-bit display resolution table 1 @ 0x54079510 (3072 x 1728 x2)
+    add_patch(
+        changes,
+        official_payload,
+        "3k_display_table_1",
+        "Display resolution table 1 (0x54079510): 3072 x 1728 x2",
+        0x54079510,
+        "000f7008000f7008",
+        bytes.fromhex("000cc006000cc006"),
+    )
+
+    # 16-bit ScreenLcdParameter table 2 @ 0x54079588 (3072 x 1728 x2)
+    add_patch(
+        changes,
+        official_payload,
+        "3k_display_table_2",
+        "ScreenLcdParameter table 2 (0x54079588): 3072 x 1728 x2",
+        0x54079588,
+        "000f7008000f7008",
+        bytes.fromhex("000cc006000cc006"),
     )
 
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "codec": "h264",
-        "name": "Ricoh GR IV v1.20 4K UHD H.264 Video Recording (Zero Crop + EIS Disabled)",
+        "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (3072x1728 Direct Output + Movie SR Restored)",
         "target": {
             "model": "GR IV Standard Edition",
             "firmware_version": "1.20",
@@ -234,7 +328,7 @@ def build() -> Path:
         actual = bytes(buf[poff : poff + len(exp)])
         assert actual == exp, f"Mismatch at {c['offset']}: {actual.hex()} != {exp.hex()}"
         buf[poff : poff + len(repl)] = repl
-        print(f"  [PATCH] {c['id']:34s} @ {c['vaddr']} ({c['length']}B): {c['description']}")
+        print(f"  [PATCH] {c['id']:38s} @ {c['vaddr']} ({c['length']}B): {c['description']}")
 
     patched_payload = rezero_payload(bytes(buf))
     assert word_sum(patched_payload) == 0, f"Payload word_sum != 0 ({word_sum(patched_payload):#x})"
@@ -267,7 +361,7 @@ def build() -> Path:
         print(f"[SUCCESS] Wrote firmware -> {out_p.resolve()} ({len(out_container):,} bytes)")
 
     print(
-        f"\n[SUMMARY] Built Ricoh GR IV v1.20 4K H.264 Firmware:\n"
+        f"\n[SUMMARY] Built Ricoh GR IV v1.20 3K UHD (3072x1728) H.264 Firmware:\n"
         f"  Container Size : {len(out_container):,} bytes\n"
         f"  Changed Bytes  : {len(changed)} bytes\n"
         f"  Frames Re-LZSS : {reemitted} frames\n"

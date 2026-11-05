@@ -1,7 +1,7 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "codec": "h264",
-  "name": "Ricoh GR IV v1.20 4K UHD H.264 Video Recording (Zero Crop + EIS Disabled)",
+  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (3072x1728 Direct Output + Movie SR Restored)",
   "target": {
     "model": "GR IV Standard Edition",
     "firmware_version": "1.20",
@@ -73,31 +73,103 @@
       "length": 8
     },
     {
-      "id": "fix_4k_active_width_div",
-      "description": "Fix 4K Active Width calculation in LiveViewProcess (movne r4, r8 -> full 3840 width, no division by 2)",
+      "id": "fix_movie_sr_active_width_symmetrical",
+      "description": "Fix Movie SR Active Width calculation (subne r4, r8, r6, lsl #1 -> Width - MarginX * 2)",
       "vaddr": "0x5365aae4",
       "offset": "0x67280c",
       "expected_hex": "a8406610",
-      "replacement_hex": "0840a011",
+      "replacement_hex": "86404810",
       "length": 4
     },
     {
-      "id": "bypass_movie_sr_call",
-      "description": "Bypass SetupMovieShakeReduction call in LiveViewProcess (bx lr immediately)",
-      "vaddr": "0x5365ab34",
-      "offset": "0x67285c",
-      "expected_hex": "007409ea",
-      "replacement_hex": "1eff2fe1",
+      "id": "3k_width_getter_1",
+      "description": "WidthGetter1 (0x538997e0): moveq r0, #0xc00 (3072 px width)",
+      "vaddr": "0x538997e0",
+      "offset": "0x8b1508",
+      "expected_hex": "0f0ca003",
+      "replacement_hex": "0c0ca003",
       "length": 4
     },
     {
-      "id": "bypass_setup_movie_sr_func",
-      "description": "Safety guard: SetupMovieShakeReduction function entry immediate return (bx lr)",
-      "vaddr": "0x538b7b3c",
-      "offset": "0x8cf864",
-      "expected_hex": "0dc0a0e1",
-      "replacement_hex": "1eff2fe1",
+      "id": "3k_width_getter_2",
+      "description": "WidthGetter2 (0x53899820): moveq r0, #0xc00 (3072 px width)",
+      "vaddr": "0x53899820",
+      "offset": "0x8b1548",
+      "expected_hex": "0f0ca003",
+      "replacement_hex": "0c0ca003",
       "length": 4
+    },
+    {
+      "id": "3k_height_getter_16_9",
+      "description": "HeightGetter 16:9 (0x5389986c): moveq r0, #0x6c0 (1728 px height)",
+      "vaddr": "0x5389986c",
+      "offset": "0x8b1594",
+      "expected_hex": "870ea003",
+      "replacement_hex": "6c0ea003",
+      "length": 4
+    },
+    {
+      "id": "3k_height_getter_default",
+      "description": "HeightGetter Default (0x53899890): moveq r0, #0x6c0 (1728 px height)",
+      "vaddr": "0x53899890",
+      "offset": "0x8b15b8",
+      "expected_hex": "220da003",
+      "replacement_hex": "6c0ea003",
+      "length": 4
+    },
+    {
+      "id": "3k_codec_width_getter",
+      "description": "CodecWidthGetter (0x53898f7c): moveq r0, #0xc00 (3072 px width)",
+      "vaddr": "0x53898f7c",
+      "offset": "0x8b0ca4",
+      "expected_hex": "0f0ca003",
+      "replacement_hex": "0c0ca003",
+      "length": 4
+    },
+    {
+      "id": "3k_codec_param_init_width",
+      "description": "CodecParamInit (0x538995a0): mov r2, #0xc00 (3072 px width)",
+      "vaddr": "0x538995a0",
+      "offset": "0x8b12c8",
+      "expected_hex": "0f2ca0e3",
+      "replacement_hex": "0c2ca0e3",
+      "length": 4
+    },
+    {
+      "id": "3k_static_table_32bit",
+      "description": "Static resolution table 32-bit (0x53de99a8): 3072 x 1728",
+      "vaddr": "0x53de99a8",
+      "offset": "0xe016d0",
+      "expected_hex": "000f000070080000",
+      "replacement_hex": "000c0000c0060000",
+      "length": 8
+    },
+    {
+      "id": "3k_static_table_16bit",
+      "description": "Static resolution table 16-bit (0x53fd8bd8): 3072 x 1728",
+      "vaddr": "0x53fd8bd8",
+      "offset": "0xff0900",
+      "expected_hex": "000f7008",
+      "replacement_hex": "000cc006",
+      "length": 4
+    },
+    {
+      "id": "3k_display_table_1",
+      "description": "Display resolution table 1 (0x54079510): 3072 x 1728 x2",
+      "vaddr": "0x54079510",
+      "offset": "0x1091238",
+      "expected_hex": "000f7008000f7008",
+      "replacement_hex": "000cc006000cc006",
+      "length": 8
+    },
+    {
+      "id": "3k_display_table_2",
+      "description": "ScreenLcdParameter table 2 (0x54079588): 3072 x 1728 x2",
+      "vaddr": "0x54079588",
+      "offset": "0x10912b0",
+      "expected_hex": "000f7008000f7008",
+      "replacement_hex": "000cc006000cc006",
+      "length": 8
     }
   ]
 }
