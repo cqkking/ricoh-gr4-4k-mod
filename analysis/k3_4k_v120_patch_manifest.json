@@ -1,0 +1,103 @@
+{
+  "schema_version": 2,
+  "codec": "h264",
+  "name": "Ricoh GR IV v1.20 4K UHD H.264 Video Recording (Zero Crop + EIS Disabled)",
+  "target": {
+    "model": "GR IV Standard Edition",
+    "firmware_version": "1.20",
+    "official_sha256": "f5cf55a48f65d55f4ebbd40bcd1d64d1ceca3c88432a2a4ceaa93fe1cad5fc3a",
+    "payload_bytes": 69632740
+  },
+  "changes": [
+    {
+      "id": "is_debug_4k_movie_enable",
+      "description": "Enable native K-3 III 4K movie pipeline gate at LiveViewDebug::IsDebug4KMovie (mov r0, #1; bx lr)",
+      "vaddr": "0x538ad500",
+      "offset": "0x8c5228",
+      "expected_hex": "0000a0e31eff2fe1",
+      "replacement_hex": "0100a0e31eff2fe1",
+      "length": 8
+    },
+    {
+      "id": "lv_defect_a_cmp_60p",
+      "description": "LiveView 4K buffer check: cmp r0, #0 (test for 60p=0 instead of 30p=1)",
+      "vaddr": "0x53652e70",
+      "offset": "0x66ab98",
+      "expected_hex": "010050e3",
+      "replacement_hex": "000050e3",
+      "length": 4
+    },
+    {
+      "id": "lv_defect_a_beq_fhd",
+      "description": "LiveView 4K buffer branch: beq 0x53652de4 (only 60p takes FHD path; 30p/24p take 4K path)",
+      "vaddr": "0x53652e78",
+      "offset": "0x66aba0",
+      "expected_hex": "d9ffff1a",
+      "replacement_hex": "d9ffff0a",
+      "length": 4
+    },
+    {
+      "id": "lv_defect_a_bool_is4k",
+      "description": "LiveView 4K flag argument: mov r3, #1 (pass boolean is4K=1 for both 30p and 24p)",
+      "vaddr": "0x53652e9c",
+      "offset": "0x66abc4",
+      "expected_hex": "0530a0e1",
+      "replacement_hex": "0130a0e3",
+      "length": 4
+    },
+    {
+      "id": "lv_defect_b_struct_offset",
+      "description": "Align m_is4KLiveView reader offset [r3, #0x55e] -> [r3, #0x564] to match writer",
+      "vaddr": "0x5365c7c8",
+      "offset": "0x6744f0",
+      "expected_hex": "5e35d3e5",
+      "replacement_hex": "6435d3e5",
+      "length": 4
+    },
+    {
+      "id": "lv_defect_c_plan4_plan5_jt",
+      "description": "Redirect LiveViewSequencePlanner Plan 4 & Plan 5 assert stubs to Plan 3 (0x5366e238)",
+      "vaddr": "0x5366e180",
+      "offset": "0x685ea8",
+      "expected_hex": "4ce2665380e26653",
+      "replacement_hex": "38e2665338e26653",
+      "length": 8
+    },
+    {
+      "id": "full_fov_sensor_mode_5_6_cis3",
+      "description": "Map Sensor Modes 5 (24p) & 6 (30p) to CIS Mode 3 (0x53671a68: Full APS-C sensor readout, zero crop)",
+      "vaddr": "0x536717ec",
+      "offset": "0x689514",
+      "expected_hex": "941a6753941a6753",
+      "replacement_hex": "681a6753681a6753",
+      "length": 8
+    },
+    {
+      "id": "fix_4k_active_width_div",
+      "description": "Fix 4K Active Width calculation in LiveViewProcess (movne r4, r8 -> full 3840 width, no division by 2)",
+      "vaddr": "0x5365aae4",
+      "offset": "0x67280c",
+      "expected_hex": "a8406610",
+      "replacement_hex": "0840a011",
+      "length": 4
+    },
+    {
+      "id": "bypass_movie_sr_call",
+      "description": "Bypass SetupMovieShakeReduction call in LiveViewProcess (bx lr immediately)",
+      "vaddr": "0x5365ab34",
+      "offset": "0x67285c",
+      "expected_hex": "007409ea",
+      "replacement_hex": "1eff2fe1",
+      "length": 4
+    },
+    {
+      "id": "bypass_setup_movie_sr_func",
+      "description": "Safety guard: SetupMovieShakeReduction function entry immediate return (bx lr)",
+      "vaddr": "0x538b7b3c",
+      "offset": "0x8cf864",
+      "expected_hex": "0dc0a0e1",
+      "replacement_hex": "1eff2fe1",
+      "length": 4
+    }
+  ]
+}
