@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-build_stage3_firmware.py - Pack Verified Stage 3 Dual-Hook AI Live View Tracking Firmware
+build_stage3_firmware.py - Pack Verified Stage 3 Dual-Hook AI Live View Tracking Firmware (v1.2.0)
+
+Rebased onto official Ricoh GR IV v1.20 baseline firmware.
 
 Builds:
   1. Preserved Stage 3 Firmware: output/fwdc248b_stage3_ai_track.bin
@@ -10,6 +12,7 @@ Builds:
 """
 
 import json
+import shutil
 import struct
 import sys
 from pathlib import Path
@@ -18,13 +21,15 @@ from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM
 REPO_ROOT = Path(r"d:\Ricoh GR4 firmware Mod")
 WORKTREE_ROOT = Path(__file__).resolve().parents[2]
 TOOLS_DIR = REPO_ROOT / "tools"
-OFFICIAL_FW = REPO_ROOT / "firmware" / "official" / "v1.11" / "fwdc248b.bin"
+OFFICIAL_FW = REPO_ROOT / "firmware" / "official" / "v1.20" / "fwdc248b.bin"
 OUTPUT_DIR = WORKTREE_ROOT / "output"
+ROOT_OUTPUT_DIR = REPO_ROOT / "output"
 STAGE2_FW = OUTPUT_DIR / "fwdc248b_stage2_dsp_wake.bin"
 STAGE3_FW = OUTPUT_DIR / "fwdc248b_stage3_ai_track.bin"
 ACTIVE_FW = OUTPUT_DIR / "fwdc248b.bin"
 SD_DIR = OUTPUT_DIR / "sd_card"
 MANIFEST_PATH = WORKTREE_ROOT / "analysis" / "dsp_stage3_manifest.json"
+ROOT_MANIFEST_PATH = REPO_ROOT / "analysis" / "dsp_stage3_manifest.json"
 
 sys.path.insert(0, str(TOOLS_DIR))
 sys.path.insert(0, str(WORKTREE_ROOT / "src" / "dsp_ai"))
@@ -57,16 +62,16 @@ from stage3_ai_patcher import (
     TENSOR_IN_VA,
     TENSOR_OUT_VA,
     GR4_BASE,
+    RTOS_PAYLOAD_START,
 )
-
-RTOS_PAYLOAD_START = 0x00017D10
 
 def v2p(vaddr: int) -> int:
     return vaddr - GR4_BASE + RTOS_PAYLOAD_START
 
 def build_stage3_release():
     print("=" * 70)
-    print("Ricoh GR IV Stage 3 AI Live View Tracking Firmware Rebuilder")
+    print("Ricoh GR IV Stage 3 AI Live View Tracking Firmware Rebuilder (v1.2.0)")
+    print("Baseline: Official Ricoh GR IV Firmware v1.20")
     print("=" * 70)
 
     # 0. Safety Guard: Check that Stage 2 binary exists and will not be overwritten
@@ -80,12 +85,13 @@ def build_stage3_release():
     verify_dsp()
     print(f"  [+] All 3 SD card binaries verified in {SD_DIR}")
 
-    # 2. Decode official firmware container
-    print("\n[Step 2/4] Decoding official firmware container baseline...")
+    # 2. Decode official v1.20 firmware container
+    print(f"\n[Step 2/4] Decoding official firmware container baseline: {OFFICIAL_FW}...")
+    assert OFFICIAL_FW.exists(), f"Official firmware missing at {OFFICIAL_FW}"
     raw_fw = OFFICIAL_FW.read_bytes()
     payload, frames, consumed = decode_container(raw_fw)
     verify_container(raw_fw, payload, consumed)
-    print(f"  -> Official payload decoded: {len(payload):,} bytes")
+    print(f"  -> Official v1.20 payload decoded: {len(payload):,} bytes")
 
     # 3. Apply Stage 3 Dual-Hook Deep Learning Tracking Patches
     print("\n[Step 3/4] Splicing Stage 3 Dual Caves, Trampolines & AI Tables...")
@@ -119,6 +125,15 @@ def build_stage3_release():
     print(f"  [+] Written Stage 3 preserved binary: {STAGE3_FW} ({len(out_container):,} bytes)")
     print(f"  [+] Written active flashable binary:  {ACTIVE_FW} ({len(out_container):,} bytes)")
 
+    # Sync to root output directory as well
+    ROOT_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    (ROOT_OUTPUT_DIR / "fwdc248b_stage3_ai_track.bin").write_bytes(out_container)
+    (ROOT_OUTPUT_DIR / "fwdc248b.bin").write_bytes(out_container)
+    root_sd_dir = ROOT_OUTPUT_DIR / "sd_card"
+    root_sd_dir.mkdir(parents=True, exist_ok=True)
+    for f in SD_DIR.glob("*.BIN"):
+        shutil.copy2(f, root_sd_dir / f.name)
+
     # Full Round-Trip Verification
     print("\n[*] Executing round-trip container verification...")
     again, _, used = decode_container(out_container)
@@ -130,7 +145,8 @@ def build_stage3_release():
     # Save release manifest
     manifest = {
         "release_type": "Stage 3 Dual-Hook Deep Learning Inference Pipeline & Live View Tracking Bridge",
-        "version": "1.1.0",
+        "version": "1.2.0",
+        "baseline_firmware": "Official Ricoh GR IV Firmware v1.20",
         "official_fw_sha256": sha256_hex(raw_fw),
         "stage2_preserved_fw": {
             "path": str(STAGE2_FW),
@@ -145,21 +161,22 @@ def build_stage3_release():
         "sd_card_dependencies": sd_manifest["files"],
         "patch_manifest": patch_manifest,
         "runtime_pipeline": {
-            "stock_rom_bugfix": "Patched DspService::LoadDsp (0x53966eb0 & 0x53966ef4) to pass `sub r1, fp, #0x40` (DF_ID_S.BIN & DF_IP.BIN) with dual-drive polling ('C': SD card, 'I': Internal 53GB flash) and relaxed drive letter check (0x53966e24) up to drive 15",
-            "mmu_and_dsp_base": "Hardware audit verified CEVA-XM4 VLIW instructions require native 0x52100000 base. Swapped Pool[3] (DspFw) to 0x52100000 (4 MB) and Pool[8] (ImageAdjustWork) to 0x51200000 (15 MB), patched ChunkLoader (0x539660c0) & LoadDsp (0x53966de4) base checks to 0x5210, and patched boot vector parameter r1=0x52100000 into DspService::Start",
-            "zero_stock_fallback": "FdLibraryService::DetectFace (0x5383ec84, stock FotoNation LibAHFD) is completely disconnected; 100% of LCD AF subject boxes originate from CEVA-CV hardware CNN",
-            "hook1_boot_awakening": "LiveViewProcess3aContoller (0x536520f0) -> Cave 1 (0x53000d60) zeroes STATUS_VA (0x52a80100..0x52a8011f) on singleton creation without blocking early-boot 3A init on SD I/O",
-            "hook2_continuous_ai_af": "FaceDetectionService::Task (0x5386ea8c) -> Cave 2 (0x53000e00) uses constructor-zeroed [r4, #0x13e] to initialize boot retry counter, polls SD card ('C') and internal memory ('I'), fixed inverted return check (beq cave2_load_ok), calls StartDsp(r1=0x52100000), then runs pure full-time CEVA-CV CNN inference",
+            "baseline": "Official Ricoh GR IV v1.20 baseline (China Mainland)",
+            "stock_rom_bugfix": "Patched v1.20 DspService::LoadDsp (0x5398ef68 & 0x5398efac) to pass `sub r1, fp, #0x40` (DF_ID_S.BIN & DF_IP.BIN) with dual-drive polling ('C': SD card, 'I': Internal 53GB flash) and relaxed drive letter check (0x5398eedc) up to drive 15",
+            "mmu_and_dsp_base": "CEVA-XM4 VLIW instructions require native 0x52100000 base. Swapped Pool[3] (DspFw) to 0x52100000 (4 MB) and Pool[8] (ImageAdjustWork) to 0x51200000 (15 MB), patched ChunkLoader (0x5398e178) & LoadDsp (0x5398ee9c) base checks to 0x5210, and patched boot vector parameter r1=0x52100000 into DspService::Start",
+            "zero_stock_fallback": "FdLibraryService::DetectFace (0x53866594, stock FotoNation LibAHFD) is completely bypassed; 100% of LCD AF subject boxes originate from CEVA-CV hardware CNN",
+            "hook1_boot_awakening": "LiveViewProcess3aContoller (0x53676ab8) -> Cave 1 (0x53000d60) zeroes STATUS_VA (0x52a80100..0x52a8011f) on singleton creation without blocking early-boot 3A init on SD I/O",
+            "hook2_continuous_ai_af": "FaceDetectionService::Task (0x5389639c) -> Cave 2 (0x53000e00) uses constructor-zeroed [r4, #0x13e] to initialize boot retry counter, polls SD card ('C') and internal memory ('I'), uses correct return check (bne cave2_load_ok for 1==SUCCESS), calls StartDsp(r1=0x52100000), then runs pure full-time CEVA-CV CNN inference",
             "safe_ddr_zones": "All shared buffers relocated to verified unmanaged, fully-mapped DDR (0x52930000..0x53000000): Tensor In @ 0x52940000, Tensor Out @ 0x52949a00, Weights @ 0x52960000..0x52a76220, Msg @ 0x52a80000, Status @ 0x52a80100 - zero collision with RTOS Live View Pool[8]",
-            "cold_start_lock": "Seeds [r4, #0x100..0x10c] = (rect_cx, rect_cy, box_size, box_size), [r4, #0x118]/[r4, #0x11c] = face_id, [r4, #0x13c] = 1, [r4, #0x121] = 0, [r4, #0x124] = 0 so SelectMainFace (0x5386dde0) and EVENT 0x04070001 lock instantaneously on Frame 1 from any head pose",
-            "frame_source": "Completed Ahip ring descriptor *(*(0x55080350 + 0x424)) dequeued by AhipService::WaitFrame (+0x04/+0x08/+0x0c, fallback *(0x55080350 + 0x1c)) + ARM D-Cache invalidate (0x538f0454) prior to CPU read",
-            "downsampler": "Aspect-ratio-aware ([r4, #0xfc] x [r4, #0xfe]) YUV420 -> 3-plane 56x56 (row stride 64) RGB tensor @ 0x52940000 with C0-continuous 2.0x backlit shadow recovery (Y < 48 -> 2x, 48..144 -> 72 + Y/2) + ARM D-Cache clean/barrier (0x538f04c4)",
-            "dsp_inference": "msg_id 4 via SendMessage (0x539663c0) & WaitMessage (0x539666dc, timeout 100 ms) with full K-3 III weights @ 0x52960000 (677,824 B) & 0x52a057c0 (461,408 B)",
-            "output_heatmap": "Head-priority (fg = max(Ch1, Ch2 - 2)) 3-channel 56x56 (row stride 64) int16_t segmentation map @ 0x52949a00 + D-Cache invalidate (0x538f0454)",
+            "cold_start_lock": "Seeds [r4, #0x100..0x10c] = (rect_cx, rect_cy, box_size, box_size), [r4, #0x118]/[r4, #0x11c] = face_id, [r4, #0x13c] = 1, [r4, #0x121] = 0, [r4, #0x124] = 0 so SelectMainFace and EVENT 0x04070001 lock instantaneously on Frame 1 from any head pose",
+            "frame_source": "Completed Ahip ring descriptor *(*(0x550813d0 + 0x434)) (fallback 0x424 / 0x1c / 0x14) dequeued by AhipService::WaitFrame + ARM D-Cache invalidate (0x5391801c) prior to CPU read",
+            "downsampler": "Aspect-ratio-aware ([r4, #0xfc] x [r4, #0xfe]) YUV420 -> 3-plane 56x56 (row stride 64) RGB tensor @ 0x52940000 with C0-continuous 2.0x backlit shadow recovery (Y < 48 -> 2x, 48..144 -> 72 + Y/2) + ARM D-Cache clean/barrier (0x5391808c)",
+            "dsp_inference": "msg_id 4 via SendMessage (0x5398e478) & WaitMessage (0x5398e794, timeout 100 ms) with full K-3 III weights @ 0x52960000 (677,824 B) & 0x52a057c0 (461,408 B)",
+            "output_heatmap": "Head-priority (fg = max(Ch1, Ch2 - 2)) 3-channel 56x56 (row stride 64) int16_t segmentation map @ 0x52949a00 + D-Cache invalidate (0x5391801c)",
             "confidence_threshold": "max_diff >= 2 and (area_cnt >= 2 or max_diff >= 4)",
             "face_result_structure": "100-byte zeroed m_DetectedFaceResult [r4, #0x78] in aspect-ratio-scaled Q8 fixed-point with dynamic blob-area box sizing [0x2800..0x5c00]",
-            "af_tracking_target": "Native dispatch via UpdateFaceDetectionResult (0x5386e0e4); ZERO calls to 0x538e32c4 (CreateTask) and ZERO calls to 0x5383ec84 (LibAHFD)",
-            "lcd_osd_rendering": "UpdateFaceDetectionResult (0x5386e0e4) renders green AI Face/Eye box on LCD and fires EVENT 0x04070001 to AF",
+            "af_tracking_target": "Native dispatch via UpdateFaceDetectionResult (0x538959f4); ZERO calls to 0x53866594 (LibAHFD)",
+            "lcd_osd_rendering": "UpdateFaceDetectionResult (0x538959f4) renders green AI Face/Eye box on LCD and fires EVENT 0x04070001 to AF",
             "af_system": "GR4 165-point on-sensor PDAF (Zaf) locks onto detected subject centroid"
         }
     }
@@ -167,35 +184,37 @@ def build_stage3_release():
     MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
     MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"[+] Saved release manifest to: {MANIFEST_PATH}")
+    ROOT_MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+    ROOT_MANIFEST_PATH.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # Disassembly verification on final patched binary
     md = Cs(CS_ARCH_ARM, CS_MODE_ARM)
-    print("\n=== Disassembly of Rebuilt Hook 1 (0x536520f0) in Flashable Image ===")
+    print(f"\n=== Disassembly of Rebuilt Hook 1 ({hex(HOOK1_SITE_VA)}) in Flashable Image ===")
     tramp1_poff = v2p(HOOK1_SITE_VA)
     tramp1_in_fw = again[tramp1_poff : tramp1_poff + 8]
     for ins in md.disasm(tramp1_in_fw, HOOK1_SITE_VA):
         print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
 
-    print("\n=== Disassembly of Rebuilt Hook 2 (0x5386ea8c) in Flashable Image ===")
+    print(f"\n=== Disassembly of Rebuilt Hook 2 ({hex(HOOK2_SITE_VA)}) in Flashable Image ===")
     tramp2_poff = v2p(HOOK2_SITE_VA)
     tramp2_in_fw = again[tramp2_poff : tramp2_poff + 8]
     for ins in md.disasm(tramp2_in_fw, HOOK2_SITE_VA):
         print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
 
-    print("\n=== Cave 1 (0x53000d60) Snippet in Flashable Image ===")
+    print(f"\n=== Cave 1 ({hex(CAVE1_VA)}) Snippet in Flashable Image ===")
     c1_poff = v2p(CAVE1_VA)
     c1_in_fw = again[c1_poff : c1_poff + 32]
     for ins in md.disasm(c1_in_fw, CAVE1_VA):
         print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
 
-    print("\n=== Cave 2 (0x53000e00) Snippet in Flashable Image ===")
+    print(f"\n=== Cave 2 ({hex(CAVE2_VA)}) Snippet in Flashable Image ===")
     c2_poff = v2p(CAVE2_VA)
     c2_in_fw = again[c2_poff : c2_poff + 32]
     for ins in md.disasm(c2_in_fw, CAVE2_VA):
         print(f"    0x{ins.address:08x}: {ins.mnemonic:8s} {ins.op_str}")
 
     print("\n" + "=" * 70)
-    print("SUCCESS: Stage 3 Dual-Hook AI Live View Tracking Firmware Built & Verified!")
+    print("SUCCESS: Stage 3 Dual-Hook AI Live View Tracking Firmware (v1.2.0) Built & Verified!")
     print("=" * 70)
 
 if __name__ == "__main__":

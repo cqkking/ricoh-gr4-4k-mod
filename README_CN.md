@@ -3,8 +3,8 @@
 [English](README.md) | [简体中文](README_CN.md)
 
 [![平台: Socionext Milbeaut M10V](https://img.shields.io/badge/平台-Socionext%20Milbeaut%20M10V-007acc.svg)](#)
-[![适配固件: Ricoh GR IV v1.11](https://img.shields.io/badge/目标固件-v1.11%20fwdc248b.bin-green.svg)](#)
-[![版本: v1.0.9](https://img.shields.io/badge/版本-v1.0.9-blue.svg)](#)
+[![适配固件: Ricoh GR IV v1.20](https://img.shields.io/badge/目标固件-v1.20%20fwdc248b.bin-green.svg)](#)
+[![版本: v1.2.0](https://img.shields.io/badge/版本-v1.2.0-blue.svg)](#)
 [![架构: ARM Cortex-A7 + CEVA-CV DSP](https://img.shields.io/badge/芯片架构-ARMv7%20%2B%20CEVA--CV%20DSP-orange.svg)](#)
 [![状态: 纯 CEVA-CV CNN 校验通过](https://img.shields.io/badge/验证状态-纯%20CEVA--CV%20CNN%20(双重累加和%3D0)-brightgreen.svg)](#)
 [![开源协议: MIT](https://img.shields.io/badge/协议-MIT-blue.svg)](#)

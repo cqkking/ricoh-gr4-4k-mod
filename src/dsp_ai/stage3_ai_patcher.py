@@ -1,98 +1,116 @@
 #!/usr/bin/env python3
 """
-stage3_ai_patcher.py - Stage 3 Deep Learning Inference Pipeline & Live View Tracking Bridge (v1.0.9)
+stage3_ai_patcher.py - Stage 3 Deep Learning Inference Pipeline & Live View Tracking Bridge (v1.2.0)
+
+Rebased onto official Ricoh GR IV v1.20 firmware baseline.
 
 Dual-Hook Architecture:
-1. Hook 1 (Boot Status Init @ LiveViewProcess3aContoller 0x536520f0 -> Cave 1 @ 0x53000d60):
+1. Hook 1 (Boot Status Init @ LiveViewProcess3aContoller 0x53676ab8 -> Cave 1 @ 0x53000d60):
    - Reconstructs APCS frame prologue without stalling early-boot 3A initialization on SD I/O.
-   - Zeroes the 32-byte DSP status/telemetry region @ STATUS_VA (0x517e0100..0x517e011f) on first boot call.
+   - Loads singleton pointer from 0x550b8650 and zeroes the 32-byte DSP status/telemetry region
+     @ STATUS_VA (0x52a80100..0x52a8011f) on first boot singleton initialization.
 
-2. Hook 2 (Pure Full-Time CEVA-CV AI AF @ FaceDetectionService::Task 0x5386ea8c -> Cave 2 @ 0x53000e00):
-   - Zero Fallback to Stock LibAHFD: FdLibraryService::DetectFace (0x5383ec84) is completely unhooked
-     so 100% of face/subject boxes on LCD are guaranteed to come from CEVA-CV hardware CNN.
+2. Hook 2 (Pure Full-Time CEVA-CV AI AF @ FaceDetectionService::Task 0x5389639c -> Cave 2 @ 0x53000e00):
+   - Zero Fallback to Stock LibAHFD: FdLibraryService::DetectFace (0x53866594) is completely bypassed
+     so 100% of face/subject boxes on LCD originate from CEVA-CV hardware CNN.
    - Boot-Guaranteed Initialization Counter via constructor-zeroed [r4, #0x13e] + STATUS_VA + 4:
-     Eliminates the v1.0.8 uninitialized DDR (0x517e0104) bug that skipped LoadDsp('C') on boot.
-     Waits 20 frames (~0.65s) for SD card mount, then retries LoadDsp('C') every 64 frames (~2.1s)
-     for up to 30 attempts (~65s) while unlocking mutex (r4 + 0x48) during SD I/O.
+     Eliminates uninitialized DDR bugs. Waits 20 frames (~0.65s) for SD card mount, then retries
+     LoadDsp('C') every 64 frames (~2.1s) for up to 30 attempts (~65s) while unlocking mutex (r4 + 0x48)
+     during SD card / storage I/O.
+   - Fixed LoadDsp return value handling: DspService::LoadDsp returns 1 on SUCCESS (bne cave2_load_ok).
+   - Dual-Drive Polling: Checks Drive 'C' (SD card) first, then falls back to Drive 'I' (Internal 53GB flash).
    - Completed AHIP Ring Frame Extraction & ARM D-Cache Invalidation:
-     Reads the completed frame ring descriptor *(*(0x55080350 + 0x424)) dequeued by AhipService::WaitFrame
-     (Y @ +0x04, U @ +0x08, V @ +0x0c) and calls InvalidateDataCache before CPU reads.
+     Reads the completed frame ring descriptor *(*(0x550813d0 + 0x434)) (fallback 0x424 / 0x1c / 0x14)
+     dequeued by AhipService::WaitFrame (Y @ +0x04, U @ +0x08, V @ +0x0c) and calls InvalidateDataCache
+     before CPU reads.
    - Aspect-Ratio-Aware Downsampler + C0-Continuous 2.0x Backlit Shadow Recovery:
-     Maps [r4, #0xfc] x [r4, #0xfe] YUV420 to 3-plane 56x56 (stride 64) RGB @ 0x51600000 while lifting
+     Maps [r4, #0xfc] x [r4, #0xfe] YUV420 to 3-plane 56x56 (stride 64) RGB @ 0x52940000 while lifting
      crushed backlit (逆光) shadows (Y < 48 -> 2x, 48..144 -> 72 + Y/2) without clipping highlights.
    - Head-Priority Heatmap Scanner, Dynamic Box Sizing & Full SelectMainFace State Seeding:
      Prioritizes Ch1 (Human/Head) over Ch2 (Body/Animal), scales Q8 coordinates across all aspect ratios,
      sizes the AF box dynamically from foreground blob area, and seeds [r4, #0x100..0x10c] so
-     SelectMainFace (0x5386dde0) & EVENT 0x04070001 lock instantaneously on Frame 1.
+     SelectMainFace & EVENT 0x04070001 lock instantaneously on Frame 1.
 """
 
 import struct
 from pathlib import Path
 from capstone import Cs, CS_ARCH_ARM, CS_MODE_ARM
 
-GR4_BASE           = 0x53000000
+GR4_BASE               = 0x53000000
+RTOS_PAYLOAD_START     = 0x00017D28
 
-# Cave & Memory Layout
-CAVE1_VA           = 0x53000d60 # Boot-time DSP awakening cave
-CAVE2_VA           = 0x53000e00 # Continuous LiveView AI AF cave
-CAVE_VA            = CAVE2_VA   # Backward compatibility alias
-DESC_TABLE_VA      = 0x53001400 # 728 B table placed after code cave (ends @ 0x530016d8)
-MEAN_TABLE_VA      = 0x541db540 # Backward compatibility constant (9,408 B in ROM zero cave)
-STD_TABLE_VA       = 0x54217680 # Backward compatibility constant (9,408 B in ROM zero cave)
+# Cave & Memory Layout in v1.20 ROM
+CAVE1_VA               = 0x53000d60 # Boot-time DSP awakening cave (84 B)
+CAVE2_VA               = 0x53000e00 # Continuous LiveView AI AF cave (1516 B)
+CAVE_VA                = CAVE2_VA   # Backward compatibility alias
+DESC_TABLE_VA          = 0x53001440 # 728 B table placed after code cave (ends @ 0x53001718)
+MEAN_TABLE_VA          = 0x54212890 # 9,408 B table inside 13,167 byte ROM zero cave
+STD_TABLE_VA           = 0x5424e9d0 # 9,408 B table inside 16,061 byte ROM zero cave
 
 # Non-Overlapping DSP Shared DRAM Layout (0x52940000 .. 0x52a90000)
 # Safely relocated to 0x52930000..0x53000000 unallocated DDR (outside any RTOS heap!)
-TENSOR_IN_VA       = 0x52940000 # work_buf (0xbde40 B): 3-plane 56x56 (stride 64) RGB input @ +0x0000, +0x0e00, +0x1c00
-TENSOR_OUT_VA      = 0x52949a00 # work_buf + 0x9a00: 3-channel 56x56 (stride 64) int16_t segmentation output
-MEAN_WEIGHTS_VA    = 0x52960000 # Full K-3 III 0x53932548..0x539d7d08 block (677,824 B) loaded by DF_EX.BIN Chunk 1
-HEAD_WEIGHTS_VA    = 0x52a057c0 # Full K-3 III 0x539d7d08..0x53a48768 block (461,408 B) loaded by DF_EX.BIN Chunk 1
-TENSOR_MSG_VA      = 0x52a80000 # 40-byte (0x28 B) DspCommandParameter buffer (outside work_buf!)
-STATUS_VA          = 0x52a80100 # Telemetry & one-shot wakeup guard in DSP shared DRAM (outside work_buf!)
+TENSOR_IN_VA           = 0x52940000 # work_buf (0xbde40 B): 3-plane 56x56 (stride 64) RGB input @ +0x0000, +0x0e00, +0x1c00
+TENSOR_OUT_VA          = 0x52949a00 # work_buf + 0x9a00: 3-channel 56x56 (stride 64) int16_t segmentation output
+MEAN_WEIGHTS_VA        = 0x52960000 # Full K-3 III 0x53932548..0x539d7d08 block (677,824 B) loaded by DF_EX.BIN Chunk 1
+HEAD_WEIGHTS_VA        = 0x52a057c0 # Full K-3 III 0x539d7d08..0x53a48768 block (461,408 B) loaded by DF_EX.BIN Chunk 1
+TENSOR_MSG_VA          = 0x52a80000 # 40-byte (0x28 B) DspCommandParameter buffer (outside work_buf!)
+STATUS_VA              = 0x52a80100 # Telemetry & one-shot wakeup guard in DSP shared DRAM (outside work_buf!)
 
-# Firmware Services & Entry Points
-GET_DSP_SVC_VA     = 0x539658c4 # DspFactory::GetDspService()
-LOAD_DSP_VA        = 0x53966d74 # DspService::LoadDsp(svc, 'C', 0, 0)
-START_DSP_VA       = 0x53966214 # DspService::Start(svc, 0, 0)
-TEST_DSP_VA        = 0x53966f18 # DspService::Test(svc, 0)
-SEND_MSG_VA        = 0x539663c0 # DspService::SendMessage(svc, &seq, 4, timeout, &msg)
-WAIT_MSG_VA        = 0x539666dc # DspService::WaitMessage(svc, seq, timeout, &resp)
-FD_LIB_DETECT_VA   = 0x5383ec84 # FdLibraryService::DetectFace()
-FD_LIB_GET_RES_VA  = 0x5383ed5c # FdLibraryService::GetResults(FdLibraryService*, m_DetectedFaceResult)
-UPDATE_FACE_RES_VA = 0x5386e0e4 # FaceDetectionService::UpdateFaceDetectionResult(this)
-LOCK_MUTEX_VA      = 0x538dfe24 # OsMutex::Lock(mutex, timeout)
-UNLOCK_MUTEX_VA    = 0x538dff78 # OsMutex::Unlock(mutex)
-GET_CACHE_MGR_VA   = 0x538f0448 # GetCacheManager()
-FLUSH_DCACHE_VA    = 0x538f04c4 # FlushDataCache(mgr, addr, size)
-INVAL_DCACHE_VA    = 0x538f0454 # InvalidateDataCache(mgr, addr, size)
+# Firmware Services & Entry Points in v1.20
+GET_DSP_SVC_VA         = 0x5398d97c # DspFactory::GetDspService() -> singleton struct @ 0x553a3160
+LOAD_DSP_VA            = 0x5398ee2c # DspService::LoadDsp(svc, 'C', 0, 0)
+START_DSP_VA           = 0x5398e2cc # DspService::Start(svc, boot_addr=0x52100000, 0)
+TEST_DSP_VA            = 0x5398efd0 # DspService::Test(svc, 0)
+SEND_MSG_VA            = 0x5398e478 # DspService::SendMessage(svc, &seq, 4, timeout, &msg)
+WAIT_MSG_VA            = 0x5398e794 # DspService::WaitMessage(svc, seq, timeout, &resp)
+FD_LIB_DETECT_VA       = 0x53866594 # FdLibraryService::DetectFace() (stock FotoNation LibAHFD detect entry)
+FD_LIB_GET_RES_VA      = 0x5386666c # FdLibraryService::GetResults(FdLibraryService*, m_DetectedFaceResult)
+UPDATE_FACE_RES_VA     = 0x538959f4 # FaceDetectionService::UpdateFaceDetectionResult(this)
+LOCK_MUTEX_VA          = 0x53907930 # OsMutex::Lock(mutex, timeout)
+UNLOCK_MUTEX_VA        = 0x53907a84 # OsMutex::Unlock(mutex)
+MUTEX_COOKIE_VA        = 0x540184a0 # Mutex cookie pointer for FaceDetectionService
+GET_CACHE_MGR_VA       = 0x53918010 # GetCacheManager() -> returns cache manager 0x553a26c4
+FLUSH_DCACHE_VA        = 0x5391808c # FlushDataCache(mgr, addr, size)
+INVAL_DCACHE_VA        = 0x5391801c # InvalidateDataCache(mgr, addr, size)
 
-# Stock ROM Bug Sites in DspService::LoadDsp (0x53966d74):
-# 0x53966eb0 and 0x53966ef4 erroneously pass hardcoded "A:\DF_ID_S.BIN" (0x543085fc)
-# and "A:\DF_IP.BIN" (0x543085ec) instead of `sub r1, fp, #0x40` ("C:\DF_*.BIN")!
-LOAD_DSP_ID_BUG_VA  = 0x53966eb0
-LOAD_DSP_IP_BUG1_VA = 0x53966ef4
-LOAD_DSP_IP_BUG2_VA = 0x53966f00
-STR_DF_EX_VA        = 0x543085dc # "A:\DF_EX.BIN" -> "C:\DF_EX.BIN"
-STR_DF_IP_VA        = 0x543085ec # "A:\DF_IP.BIN" -> "C:\DF_IP.BIN"
-STR_DF_ID_S_VA      = 0x543085fc # "A:\DF_ID_S.BIN" -> "C:\DF_ID_S.BIN"
+# Stock ROM Bug Sites & Patches in v1.20 DspService::LoadDsp (0x5398ee2c):
+LOAD_DSP_ID_BUG_VA     = 0x5398ef68 # movw r1, #0xffac; movt r1, #0x5433 -> sub r1, fp, #0x40; nop
+LOAD_DSP_IP_BUG1_VA    = 0x5398efac # movw r1, #0xff9c -> sub r1, fp, #0x40
+LOAD_DSP_IP_BUG2_VA    = 0x5398efb8 # movt r1, #0x5433 -> nop
+LOAD_DSP_DRV_CMP_VA    = 0x5398eedc # cmp r3, #5 -> cmp r3, #15 (allows drives 'A'..'P')
+CHUNK_LOADER_BASE_VA   = 0x5398e178 # movt r3, #0x5120 -> movt r3, #0x5210
+LOAD_DSP_P3_BASE_VA    = 0x5398ee9c # movt r3, #0x5120 -> movt r3, #0x5210
+LOAD_DSP_IDS_DEST_VA   = 0x5398ef78 # movt r0, #0x515e -> movt r0, #0x524e
+LOAD_DSP_IP_DEST_VA    = 0x5398efb4 # movt r0, #0x515f -> movt r0, #0x524f
 
-# Hardware & Service Pointers
-AHIP_DRV_BASE_VA   = 0x55080350 # [0x55080350 + 0x1c] -> active Ahip YUV420 frame descriptor
-TRACK_OBJ_PTR_VA   = 0x550b6aa4 # [0x550b6aa4] -> LiveViewProcessTrackObject instance
+# String pointers in v1.20 ROM
+STR_DF_EX_VA           = 0x5433ff8c # "A:\DF_EX.BIN" -> "C:\DF_EX.BIN"
+STR_DF_IP_VA           = 0x5433ff9c # "A:\DF_IP.BIN" -> "C:\DF_IP.BIN"
+STR_DF_ID_S_VA         = 0x5433ffac # "A:\DF_ID_S.BIN" -> "C:\DF_ID_S.BIN"
 
-# Hook Sites
-HOOK1_SITE_VA      = 0x536520f0 # LiveViewProcess3aContoller entry (Boot Awakening)
-HOOK1_RESUME_VA    = 0x53652108 # Resume at ldr r6, [r4] after prologue
+# Hardware & Service Pointers in v1.20
+AHIP_DRV_BASE_VA       = 0x550813d0 # Active Ahip frame driver base (shifted +0x1080 from v1.11)
+TRACK_OBJ_PTR_VA       = 0x550b8650 # Singleton pointer
 
-HOOK2_SITE_VA      = 0x5386ea8c # FaceDetectionService::Task per-frame detect site
-HOOK2_FALLBACK_VA  = 0x5386ea94 # Resume after stock detect (cmp r0, #0)
-HOOK2_AI_RESUME_VA = 0x5386ea9c # Resume after AI detect (mov r0, r6; bl UpdateFaceDetectionResult)
+# Hook Sites in v1.20
+HOOK1_SITE_VA          = 0x53676ab8 # LiveViewProcess3aContoller entry (Boot Awakening)
+HOOK1_RESUME_VA        = 0x53676ad4 # Resume at original code after prologue
+HOOK1_SINGLETON_VA     = 0x550b8650 # Singleton struct pointer checked by Hook 1
+
+HOOK2_SITE_VA          = 0x5389639c # FaceDetectionService::Task per-frame detect site
+HOOK2_FALLBACK_VA      = 0x538963a4 # Resume after stock detect (cmp r0, #0)
+HOOK2_AI_RESUME_VA     = 0x538963ac # Resume after AI detect (mov r0, r6; bl UpdateFaceDetectionResult)
+
+# Memory Pool Table Offsets in Payload (.data)
+POOL3_PAYLOAD_OFF      = 0x013e5b78 # Pool[3] (DspFw) @ 0x543cde50
+POOL8_PAYLOAD_OFF      = 0x013e5bc8 # Pool[8] (ImageAdjustWork) @ 0x543cdea0
 
 # Backward compatibility aliases
-HOOK_SITE_VA       = HOOK2_SITE_VA
-FALLBACK_RESUME_VA = HOOK2_FALLBACK_VA
-AI_RESUME_VA       = HOOK2_AI_RESUME_VA
-RETURN_SITE_VA     = HOOK2_FALLBACK_VA
-UPDATE_TRACK_VA    = 0x00000000
+HOOK_SITE_VA           = HOOK2_SITE_VA
+FALLBACK_RESUME_VA     = HOOK2_FALLBACK_VA
+AI_RESUME_VA           = HOOK2_AI_RESUME_VA
+RETURN_SITE_VA         = HOOK2_FALLBACK_VA
+UPDATE_TRACK_VA        = 0x00000000
 
 def encode_arm_branch(from_va: int, to_va: int, is_bl: bool = False, cond: int = 0xe) -> int:
     disp = to_va - (from_va + 8)
@@ -136,11 +154,10 @@ def build_cave1_payload(cave_va: int = CAVE1_VA, resume_va: int = HOOK1_RESUME_V
     insns.append(0xe24cb004) # sub  fp, ip, #4
     insns.append(0xe24dd008) # sub  sp, sp, #8
 
-    # 2. Execute original prologue setup: r4 = 0x550b69c8
-    insns.append(0xe30649c8) # movw r4, #0x69c8
-    insns.append(0xe345450b) # movt r4, #0x550b
+    # 2. Execute original prologue setup: r4 = HOOK1_SINGLETON_VA (0x550b8650)
+    emit_ldr_imm32(insns, 4, HOOK1_SINGLETON_VA)
 
-    # 3. Only zero STATUS_VA (0x517e0100..0x517e011f) on first boot singleton creation ([r4] == 0)
+    # 3. Only zero STATUS_VA (0x52a80100..0x52a8011f) on first boot singleton creation ([r4] == 0)
     #    Avoids early-boot SD card I/O contention before C:\ finishes mounting!
     insns.append(0xe5946000) # ldr  r6, [r4]
     insns.append(0xe3560000) # cmp  r6, #0
@@ -158,7 +175,7 @@ def build_cave1_payload(cave_va: int = CAVE1_VA, resume_va: int = HOOK1_RESUME_V
     insns.append(0xe583201c) # str  r2, [r3, #0x1c]
 
     mark_label("exit")
-    # 4. Branch cleanly to LiveViewProcess3aContoller resume site (0x53652108: ldr r6, [r4])
+    # 4. Branch cleanly to LiveViewProcess3aContoller resume site (0x53676ad4)
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, resume_va, is_bl=False))
 
@@ -200,7 +217,7 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe24dd008) # sub  sp, sp, #8
 
     # 2. Default face_count = 0 in FdLibraryService ([r4, #0x38]) upfront!
-    #    Stock LibAHFD (0x5383ec84) is NEVER called anywhere in v1.0.9, so 100% of
+    #    Stock LibAHFD (0x53866594) is NEVER called, so 100% of
     #    detected boxes on LCD are mathematically guaranteed to come from CEVA-CV CNN.
     insns.append(0xe5943038) # ldr  r3, [r4, #0x38] (FdLibraryService*)
     insns.append(0xe3530000) # cmp  r3, #0
@@ -222,8 +239,6 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     branch_to("dsp_is_running", is_bl=False, cond=0x1) # bne .dsp_is_running
 
     # --- Boot-Guaranteed Retry Counter via constructor-zeroed [r4, #0x13e] ---
-    # FaceDetectionService::FaceDetectionService (0x5386d974) explicitly executes
-    # `strb 0, [r4, #0x13e]` on EVERY boot, eliminating uninitialized DDR @ 0x517e0104!
     emit_ldr_imm32(insns, 8, STATUS_VA)
     insns.append(0xe5d4213e) # ldrb r2, [r4, #0x13e]
     insns.append(0xe3520000) # cmp  r2, #0
@@ -259,8 +274,8 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, LOAD_DSP_VA, is_bl=True))
 
-    insns.append(0xe3500000) # cmp  r0, #0 (0 is SUCCESS in DspService::LoadDsp!)
-    branch_to("cave2_load_ok", is_bl=False, cond=0x0) # beq .cave2_load_ok
+    insns.append(0xe3500000) # cmp  r0, #0 (1 is SUCCESS in DspService::LoadDsp!)
+    branch_to("cave2_load_ok", is_bl=False, cond=0x1) # bne .cave2_load_ok
 
     # If Drive 'C' failed, try Drive 'I' (Built-in 53GB Memory)
     insns.append(0xe1a00005) # mov  r0, r5 (m_dspService)
@@ -271,14 +286,14 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(encode_arm_branch(curr_pc, LOAD_DSP_VA, is_bl=True))
 
     insns.append(0xe3500000) # cmp  r0, #0
-    branch_to("cave2_load_ok", is_bl=False, cond=0x0) # beq .cave2_load_ok
+    branch_to("cave2_load_ok", is_bl=False, cond=0x1) # bne .cave2_load_ok
 
     # Both C:\ and I:\ failed: clear false LOADED bit and return
     insns.append(0xe3a02000) # mov  r2, #0
     insns.append(0xe5852004) # str  r2, [r5, #4] (clear false LOADED bit)
     # Re-lock FaceDetectionService mutex (r4 + 0x48) before returning to ai_done
     insns.append(0xe2840048) # add  r0, r4, #0x48
-    emit_ldr_imm32(insns, 3, 0x53fe18c8)
+    emit_ldr_imm32(insns, 3, MUTEX_COOKIE_VA)
     insns.append(0xe5931000) # ldr  r1, [r3]
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, LOCK_MUTEX_VA, is_bl=True))
@@ -286,7 +301,6 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
 
     mark_label("cave2_load_ok")
     # Start CEVA-CV DSP at native K-3 III base address 0x52100000!
-    # DspService::Start(svc, boot_addr=0x52100000, 0) writes 0x52100000 to MMIO [0x1f000014]
     insns.append(0xe1a00005) # mov  r0, r5
     emit_ldr_imm32(insns, 1, 0x52100000) # mov  r1, #0x52100000 (DSP boot address)
     insns.append(0xe3a02000) # mov  r2, #0
@@ -302,7 +316,7 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe5881000) # str  r1, [r8, #0]
     # Re-lock FaceDetectionService mutex (r4 + 0x48)
     insns.append(0xe2840048) # add  r0, r4, #0x48
-    emit_ldr_imm32(insns, 3, 0x53fe18c8)
+    emit_ldr_imm32(insns, 3, MUTEX_COOKIE_VA)
     insns.append(0xe5931000) # ldr  r1, [r3]
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, LOCK_MUTEX_VA, is_bl=True))
@@ -315,14 +329,27 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     mark_label("dsp_is_running")
 
     # 6. Extract Completed Live View Planar YUV420 Frame from Ahip Ring Buffer:
-    #    Primary: ring_entry = *(*(0x55080350 + 0x424)) dequeued by AhipService::WaitFrame
-    #             where Y = [entry, #0x04], U = [entry, #0x08], V = [entry, #0x0c]!
-    #    Fallback: DMA node *(0x55080350 + 0x1c) / *(0x55080350 + 0x14) (+0x0c/+0x10/+0x14).
+    #    Primary in v1.20: ring_entry = *(*(0x550813d0 + 0x434)) dequeued by AhipService::WaitFrame
+    #    Fallback 1:       ring_entry = *(*(0x550813d0 + 0x424))
+    #    Fallback 2:       DMA node *(0x550813d0 + 0x1c) / *(0x550813d0 + 0x14)
     emit_ldr_imm32(insns, 3, AHIP_DRV_BASE_VA)
     insns.append(0xe593900c) # ldr  sb, [r3, #0x0c] (Ahip YUV slot byte size)
-    insns.append(0xe5932424) # ldr  r2, [r3, #0x424] (0x553974cc)
+    insns.append(0xe5932434) # ldr  r2, [r3, #0x434] (primary completed ring entry in v1.20)
     insns.append(0xe3520000) # cmp  r2, #0
-    insns.append(0x15922000) # ldrne r2, [r2, #0]   (completed ring_entry)
+    insns.append(0x15922000) # ldrne r2, [r2, #0]
+    insns.append(0xe3520000) # cmp  r2, #0
+    branch_to("try_ahip_424", is_bl=False, cond=0x0) # beq .try_ahip_424
+    insns.append(0xe5926004) # ldr  r6, [r2, #0x04] (Y_plane)
+    insns.append(0xe3560000) # cmp  r6, #0
+    branch_to("try_ahip_424", is_bl=False, cond=0x0) # beq .try_ahip_424
+    insns.append(0xe5927008) # ldr  r7, [r2, #0x08] (U_plane)
+    insns.append(0xe592800c) # ldr  r8, [r2, #0x0c] (V_plane)
+    branch_to("have_yuv_ptrs", is_bl=False, cond=0xe) # b .have_yuv_ptrs
+
+    mark_label("try_ahip_424")
+    insns.append(0xe5932424) # ldr  r2, [r3, #0x424] (fallback ring entry)
+    insns.append(0xe3520000) # cmp  r2, #0
+    insns.append(0x15922000) # ldrne r2, [r2, #0]
     insns.append(0xe3520000) # cmp  r2, #0
     branch_to("try_ahip_legacy", is_bl=False, cond=0x0) # beq .try_ahip_legacy
     insns.append(0xe5926004) # ldr  r6, [r2, #0x04] (Y_plane)
@@ -355,7 +382,7 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, INVAL_DCACHE_VA, is_bl=True))
 
-    # 8. Downsample Planar YUV420 (fd_w x fd_h) into 3-plane 56x56 (stride 64) RGB @ 0x51600000
+    # 8. Downsample Planar YUV420 (fd_w x fd_h) into 3-plane 56x56 (stride 64) RGB @ 0x52940000
     insns.append(0xe1d4cfbc) # ldrh ip, [r4, #0xfc] (fd_w, default 320)
     insns.append(0xe35c0000) # cmp  ip, #0
     insns.append(encode_movw(12, 320, cond=0x0)) # moveq ip, #320
@@ -364,12 +391,12 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(encode_movw(9, 212, cond=0x0))  # moveq sb, #212
 
     insns.append(0xe1a00006) # mov  r0, r6 (Y_plane)
-    emit_ldr_imm32(insns, 1, TENSOR_IN_VA) # r1 = 0x51600000
+    emit_ldr_imm32(insns, 1, TENSOR_IN_VA) # r1 = 0x52940000
     insns.append(0xe1a02007) # mov  r2, r7 (U_plane)
     insns.append(0xe1a03008) # mov  r3, r8 (V_plane)
     branch_to("sub_downsample", is_bl=True, cond=0xe)
 
-    # 9. Flush ARM D-Cache for work_buf (0x51600000, size 0xee00) before DSP DMA
+    # 9. Flush ARM D-Cache for work_buf (0x52940000, size 0xee00) before DSP DMA
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, GET_CACHE_MGR_VA, is_bl=True))
     emit_ldr_imm32(insns, 1, TENSOR_IN_VA)
@@ -377,20 +404,19 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, FLUSH_DCACHE_VA, is_bl=True))
 
-    # 10. Prepare 10-word (0x28 B) DspCommandParameter @ TENSOR_MSG_VA (0x517e0000)
-    #     Matches K-3 III DeepLearningService::Execute (0x5302c8f4) word-for-word!
-    emit_ldr_imm32(insns, 7, TENSOR_MSG_VA)   # r7 = 0x517e0000
-    emit_ldr_imm32(insns, 0, DESC_TABLE_VA)   # msg[+0x00] = vtable (0x53001400)
+    # 10. Prepare 10-word (0x28 B) DspCommandParameter @ TENSOR_MSG_VA (0x52a80000)
+    emit_ldr_imm32(insns, 7, TENSOR_MSG_VA)   # r7 = 0x52a80000
+    emit_ldr_imm32(insns, 0, DESC_TABLE_VA)   # msg[+0x00] = vtable (0x53001440)
     insns.append(0xe5870000)                  # str  r0, [r7, #0x00]
     insns.append(0xe3a00000)                  # mov  r0, #0
     insns.append(0xe5870004)                  # str  r0, [r7, #0x04] (seq_id | msg_id)
     insns.append(0xe5870020)                  # str  r0, [r7, #0x20] (0)
     insns.append(0xe5870024)                  # str  r0, [r7, #0x24] (0)
-    emit_ldr_imm32(insns, 0, TENSOR_IN_VA)    # msg[+0x08] = work_buf (0x51600000)
+    emit_ldr_imm32(insns, 0, TENSOR_IN_VA)    # msg[+0x08] = work_buf (0x52940000)
     insns.append(0xe5870008)                  # str  r0, [r7, #0x08]
-    emit_ldr_imm32(insns, 0, HEAD_WEIGHTS_VA) # msg[+0x0c] = 0x517657c0 (K-3 III 0x539d7d08, 461,408 B)
+    emit_ldr_imm32(insns, 0, HEAD_WEIGHTS_VA) # msg[+0x0c] = 0x52a057c0 (461,408 B)
     insns.append(0xe587000c)                  # str  r0, [r7, #0x0c]
-    emit_ldr_imm32(insns, 0, MEAN_WEIGHTS_VA) # msg[+0x10] = 0x516c0000 (K-3 III 0x53932548, 677,824 B)
+    emit_ldr_imm32(insns, 0, MEAN_WEIGHTS_VA) # msg[+0x10] = 0x52960000 (677,824 B)
     insns.append(0xe5870010)                  # str  r0, [r7, #0x10]
     emit_ldr_imm32(insns, 0, 0x00080808)      # msg[+0x14] = 0x00080808
     insns.append(0xe5870014)                  # str  r0, [r7, #0x14]
@@ -399,7 +425,7 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     emit_ldr_imm32(insns, 0, 0x0c0c0c0c)      # msg[+0x1c] = 0x0c0c0c0c
     insns.append(0xe587001c)                  # str  r0, [r7, #0x1c]
 
-    # 11. Setup seq pointer @ STATUS_VA + 8 (0x517e0108)
+    # 11. Setup seq pointer @ STATUS_VA + 8 (0x52a80108)
     emit_ldr_imm32(insns, 6, STATUS_VA + 8)
     insns.append(0xe3a00000) # mov  r0, #0
     insns.append(0xe1c600b0) # strh r0, [r6]
@@ -425,7 +451,7 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe3500000) # cmp  r0, #0
     branch_to("ai_done", is_bl=False, cond=0x1) # bne .ai_done
 
-    # 14. Invalidate ARM D-Cache for output heatmap @ 0x51609a00 (size 0x5400 = 3 * 0x1c00)
+    # 14. Invalidate ARM D-Cache for output heatmap @ 0x52949a00 (size 0x5400 = 3 * 0x1c00)
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, GET_CACHE_MGR_VA, is_bl=True))
     emit_ldr_imm32(insns, 1, TENSOR_OUT_VA)
@@ -433,7 +459,7 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, INVAL_DCACHE_VA, is_bl=True))
 
-    # 15. Scan 3-channel 56x56 (stride 64) int16_t output heatmap @ 0x51609a00
+    # 15. Scan 3-channel 56x56 (stride 64) int16_t output heatmap @ 0x52949a00
     emit_ldr_imm32(insns, 0, TENSOR_OUT_VA)
     branch_to("sub_find_peak", is_bl=True, cond=0xe) # returns r0: max_diff, r1: col, r2: row, r3: area_cnt
 
@@ -460,7 +486,7 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe3590064) # cmp  sb, #100
     insns.append(0xc3a09064) # movgt sb, #100
 
-    # Aspect-ratio-exact Q8 coordinates matching UpdateFaceDetectionResult (0x5386e2cc):
+    # Aspect-ratio-exact Q8 coordinates matching UpdateFaceDetectionResult:
     # cx = (best_col * fd_w * 73) >> 4, cy = (best_row * fd_h * 73) >> 4
     insns.append(0xe1d43fbc)                     # ldrh r3, [r4, #0xfc] (fd_w)
     insns.append(0xe3530000)                     # cmp  r3, #0
@@ -484,7 +510,7 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe05c60a5) # subs r6, ip, r5, lsr #1
     insns.append(0x43a06000) # movmi r6, #0 (top)
 
-    # Save telemetry @ STATUS_VA + 12 (0x517e010c)
+    # Save telemetry @ STATUS_VA + 12 (0x52a8010c)
     emit_ldr_imm32(insns, 3, STATUS_VA + 12)
     insns.append(0xe5839000) # str  sb, [r3, #0]  (peak_score)
     insns.append(0xe5838004) # str  r8, [r3, #4]  (last_x Q8)
@@ -525,8 +551,8 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe58a302c) # str  r3, [sl, #0x2c] (eye1.height)
 
     # +0x4c: confidence score, +0x50: face_id
-    # Complete SelectMainFace (0x5386dde0) & EVENT 0x04070001 State Seeding:
-    # Must seed [r4, #0x100..0x10c] = (left + w/2, top + h/2, w, h) matching 0x5386e92c
+    # Complete SelectMainFace & EVENT 0x04070001 State Seeding:
+    # Must seed [r4, #0x100..0x10c] = (left + w/2, top + h/2, w, h)
     # in addition to [r4, #0x118..0x11c], [r4, #0x121] = 0, [r4, #0x124] = 0, and
     # [r4, #0x13c] = 1 so SelectMainFace never rejects cold-start coordinates!
     insns.append(0xe58a904c) # str  sb, [sl, #0x4c] (confidence)
@@ -558,8 +584,8 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe5831034) # str  r1, [r3, #0x34] (main_face_idx = 0)
 
     mark_label("ai_done")
-    # Restore stack and resume at HOOK2_AI_RESUME_VA (0x5386ea9c):
-    # Unlocks mutex r6 and calls UpdateFaceDetectionResult(r4) (0x5386e0e4)
+    # Restore stack and resume at HOOK2_AI_RESUME_VA (0x538963ac):
+    # Unlocks mutex r6 and calls UpdateFaceDetectionResult(r4) (0x538959f4)
     insns.append(0xe28dd008) # add  sp, sp, #8
     insns.append(0xe8bd47f0) # pop  {r4, r5, r6, r7, r8, sb, sl, lr}
     insns.append(0xe8bd000f) # pop  {r0, r1, r2, r3}
@@ -568,16 +594,11 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
 
     # ---------------------------------------------------------------------
     # Subroutine: Aspect-Ratio-Aware Downsampler + 2.0x Backlit Shadow Recovery
-    # Inputs:
-    #   r0 = Y_plane, r1 = TENSOR_IN_VA (0x51600000), r2 = U_plane, r3 = V_plane,
-    #   ip = fd_w (e.g. 320), sb = fd_h (e.g. 212 / 180 / 240 / 320, saved at [sp, #0x14])
-    # Plane 0 (R) @ r1 + 0x0000, Plane 1 (G) @ r1 + 0x0e00, Plane 2 (B) @ r1 + 0x1c00
     # ---------------------------------------------------------------------
     mark_label("sub_downsample")
-    insns.append(0xe92d47f0) # push {r4, r5, r6, r7, r8, sb, sl, lr} (sb=fd_h @ [sp, #0x14])
+    insns.append(0xe92d47f0) # push {r4, r5, r6, r7, r8, sb, sl, lr}
     insns.append(0xe3a04000) # mov  r4, #0 (row = 0)
     mark_label("loop_ds_row")
-    # src_y = (row * fd_h * 9) >> 9 (maps 0..55 cleanly inside any fd_h)
     insns.append(0xe59d6014) # ldr  r6, [sp, #0x14] (fd_h)
     insns.append(0xe0060694) # mul  r6, r4, r6      (row * fd_h)
     insns.append(0xe0866186) # add  r6, r6, r6, lsl #3 (row * fd_h * 9)
@@ -587,7 +608,6 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
 
     insns.append(0xe3a05000) # mov  r5, #0 (col = 0)
     mark_label("loop_ds_col")
-    # src_x = (col * fd_w * 9) >> 9 (maps 0..55 cleanly inside any fd_w)
     insns.append(0xe0060c95) # mul  r6, r5, ip      (col * fd_w)
     insns.append(0xe0866186) # add  r6, r6, r6, lsl #3 (col * fd_w * 9)
     insns.append(0xe1a064a6) # lsr  r6, r6, #9      (src_x)
@@ -672,7 +692,7 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
 
     # ---------------------------------------------------------------------
     # Subroutine: Head-Priority 3-Channel 56x56 (Stride 64) int16_t Heatmap Scanner
-    # Input:  r0 = TENSOR_OUT_VA (0x51609a00)
+    # Input:  r0 = TENSOR_OUT_VA (0x52949a00)
     # Output: r0 = max_diff, r1 = best_col (0..55), r2 = best_row (0..55), r3 = area_cnt
     # ---------------------------------------------------------------------
     mark_label("sub_find_peak")
@@ -742,7 +762,7 @@ build_trampoline_payload = build_tramp2_payload
 # -------------------------------------------------------------------------
 # Splicer: Injects Dual Caves, Trampolines & Neural Descriptors
 # -------------------------------------------------------------------------
-def apply_stage3_patch(rtos_binary: bytearray, rtos_payload_offset: int = 0) -> dict:
+def apply_stage3_patch(rtos_binary: bytearray, rtos_payload_offset: int = RTOS_PAYLOAD_START) -> dict:
     dsp_ai_dir = Path(__file__).resolve().parent
     desc_bytes = (dsp_ai_dir / "k3_desc.bin").read_bytes()
     mean_bytes = (dsp_ai_dir / "k3_mean.bin").read_bytes()
@@ -787,10 +807,10 @@ def apply_stage3_patch(rtos_binary: bytearray, rtos_payload_offset: int = 0) -> 
     assert orig_hook1_bytes == expected_hook1, f"Unexpected hook 1 bytes: {orig_hook1_bytes.hex()} (expected {expected_hook1.hex()})"
 
     orig_hook2_bytes = bytes(rtos_binary[tramp2_off : tramp2_off + len(tramp2_payload)])
-    expected_hook2 = bytes.fromhex("380094e57b40ffeb") # ldr r0, [r4, #0x38]; bl #0x5383ec84
+    expected_hook2 = bytes.fromhex("380094e57b40ffeb") # ldr r0, [r4, #0x38]; bl #0x53866594
     assert orig_hook2_bytes == expected_hook2, f"Unexpected hook 2 bytes: {orig_hook2_bytes.hex()} (expected {expected_hook2.hex()})"
 
-    # Apply patches
+    # Apply caves and trampolines
     rtos_binary[cave1_off : cave1_off + len(cave1_payload)] = cave1_payload
     rtos_binary[tramp1_off : tramp1_off + len(tramp1_payload)] = tramp1_payload
 
@@ -801,70 +821,59 @@ def apply_stage3_patch(rtos_binary: bytearray, rtos_payload_offset: int = 0) -> 
     rtos_binary[mean_off : mean_off + len(mean_bytes)] = mean_bytes
     rtos_binary[std_off : std_off + len(std_bytes)] = std_bytes
 
-    # Fix stock Ricoh GR4 ROM bugs in DspService::LoadDsp (0x53966d74) where
-    # 0x53966eb0 and 0x53966ef4 pass hardcoded "A:\DF_ID_S.BIN" / "A:\DF_IP.BIN"
-    # instead of `sub r1, fp, #0x40` ("C:\DF_*.BIN"):
+    # Stock ROM Bug Sites in v1.20 DspService::LoadDsp (0x5398ee2c):
     id_bug_off  = LOAD_DSP_ID_BUG_VA  - GR4_BASE + rtos_payload_offset
     ip_bug1_off = LOAD_DSP_IP_BUG1_VA - GR4_BASE + rtos_payload_offset
     ip_bug2_off = LOAD_DSP_IP_BUG2_VA - GR4_BASE + rtos_payload_offset
-    assert bytes(rtos_binary[id_bug_off : id_bug_off + 8]) == bytes.fromhex("fc1508e3301445e3"), "Unexpected bytes at 0x53966eb0"
-    assert bytes(rtos_binary[ip_bug1_off : ip_bug1_off + 4]) == bytes.fromhex("ec1508e3"), "Unexpected bytes at 0x53966ef4"
-    assert bytes(rtos_binary[ip_bug2_off : ip_bug2_off + 4]) == bytes.fromhex("301445e3"), "Unexpected bytes at 0x53966f00"
+    assert bytes(rtos_binary[id_bug_off : id_bug_off + 8]) == bytes.fromhex("ac1f0fe3331445e3"), "Unexpected bytes at LOAD_DSP_ID_BUG_VA"
+    assert bytes(rtos_binary[ip_bug1_off : ip_bug1_off + 4]) == bytes.fromhex("9c1f0fe3"), "Unexpected bytes at LOAD_DSP_IP_BUG1_VA"
+    assert bytes(rtos_binary[ip_bug2_off : ip_bug2_off + 4]) == bytes.fromhex("331445e3"), "Unexpected bytes at LOAD_DSP_IP_BUG2_VA"
 
     rtos_binary[id_bug_off : id_bug_off + 8] = struct.pack("<II", 0xe24b1040, 0xe1a00000) # sub r1, fp, #0x40; nop
     rtos_binary[ip_bug1_off : ip_bug1_off + 4] = struct.pack("<I", 0xe24b1040)            # sub r1, fp, #0x40
     rtos_binary[ip_bug2_off : ip_bug2_off + 4] = struct.pack("<I", 0xe1a00000)            # nop
 
+    # Drive letter validation patch (cmp r3, #5 -> cmp r3, #15)
+    drv_cmp_off = LOAD_DSP_DRV_CMP_VA - GR4_BASE + rtos_payload_offset
+    assert bytes(rtos_binary[drv_cmp_off : drv_cmp_off + 4]) == struct.pack("<I", 0xe3530005)
+    rtos_binary[drv_cmp_off : drv_cmp_off + 4] = struct.pack("<I", 0xe353000f)
+
+    # ChunkLoader (0x5398e178) & LoadDsp (0x5398ee9c) base address checks (0x5120 -> 0x5210)
+    chunk_off = CHUNK_LOADER_BASE_VA - GR4_BASE + rtos_payload_offset
+    p3chk_off = LOAD_DSP_P3_BASE_VA  - GR4_BASE + rtos_payload_offset
+    assert bytes(rtos_binary[chunk_off : chunk_off + 4]) == struct.pack("<I", 0xe3453120)
+    assert bytes(rtos_binary[p3chk_off : p3chk_off + 4]) == struct.pack("<I", 0xe3453120)
+    rtos_binary[chunk_off : chunk_off + 4] = struct.pack("<I", 0xe3453210)
+    rtos_binary[p3chk_off : p3chk_off + 4] = struct.pack("<I", 0xe3453210)
+
+    # DF_ID_S & DF_IP destination VAs in LoadDsp (0x515e -> 0x524e, 0x515f -> 0x524f)
+    ids_dest_off = LOAD_DSP_IDS_DEST_VA - GR4_BASE + rtos_payload_offset
+    ip_dest_off  = LOAD_DSP_IP_DEST_VA  - GR4_BASE + rtos_payload_offset
+    assert bytes(rtos_binary[ids_dest_off : ids_dest_off + 4]) == struct.pack("<I", 0xe345015e)
+    assert bytes(rtos_binary[ip_dest_off : ip_dest_off + 4])   == struct.pack("<I", 0xe345015f)
+    rtos_binary[ids_dest_off : ids_dest_off + 4] = struct.pack("<I", 0xe345024e)
+    rtos_binary[ip_dest_off : ip_dest_off + 4]   = struct.pack("<I", 0xe345024f)
+
+    # Patch drive letter strings 'A' -> 'C'
     for str_va in (STR_DF_EX_VA, STR_DF_IP_VA, STR_DF_ID_S_VA):
         s_off = str_va - GR4_BASE + rtos_payload_offset
         assert rtos_binary[s_off] == 0x41, f"Expected 'A' at {hex(str_va)}"
         rtos_binary[s_off] = 0x43 # 'C' ("C:\DF_*.BIN")
 
-    # ---------------------------------------------------------------------
-    # Full-Pipeline Binary Coherence Patches (v1.1.0)
-    # ---------------------------------------------------------------------
-    # 1. Reconfigure ROM .data Memory Pool Table:
-    #    Swap Pool[3] (DspFw) to native K-3 III DSP address 0x52100000 (4 MB),
-    #    and reallocate Pool[8] (ImageAdjustWork) to 0x51200000..0x52100000 (15 MB),
-    #    completely isolating live RTOS LiveView heap from the DSP execution area!
-    DATA_LMA = 0x5437b640
-    pool3_off = (DATA_LMA - GR4_BASE) + (0x55019e0c - 0x55000000) + rtos_payload_offset
-    pool8_off = (DATA_LMA - GR4_BASE) + (0x55019e5c - 0x55000000) + rtos_payload_offset
+    # Reconfigure ROM .data Memory Pool Table:
+    # Pool[3] (DspFw) @ 0x543cde50: 0x51200000 -> 0x52100000 (4 MB)
+    # Pool[8] (ImageAdjustWork) @ 0x543cdea0: 0x01210000, 0x51600000 -> 0x00f00000, 0x51200000 (15 MB)
+    p3_off = POOL3_PAYLOAD_OFF
+    p8_off = POOL8_PAYLOAD_OFF
+    assert bytes(rtos_binary[p3_off + 8 : p3_off + 16]) == struct.pack("<II", 0x00400000, 0x51200000)
+    assert bytes(rtos_binary[p8_off + 8 : p8_off + 16]) == struct.pack("<II", 0x01210000, 0x51600000)
 
-    assert bytes(rtos_binary[pool3_off + 4 : pool3_off + 12]) == struct.pack("<II", 0x00400000, 0x51200000)
-    assert bytes(rtos_binary[pool8_off + 4 : pool8_off + 12]) == struct.pack("<II", 0x01210000, 0x51600000)
-
-    rtos_binary[pool3_off + 4 : pool3_off + 12] = struct.pack("<II", 0x00400000, 0x52100000)
-    rtos_binary[pool8_off + 4 : pool8_off + 12] = struct.pack("<II", 0x00f00000, 0x51200000)
-
-    # 2. Patch ChunkLoader (0x539660c0) & DspService::LoadDsp (0x53966de4) base checks:
-    #    movt r3, #0x5120 (0xe3453120) -> movt r3, #0x5210 (0xe3453210)
-    off_chunk0 = 0x539660c0 - GR4_BASE + rtos_payload_offset
-    off_p3_chk = 0x53966de4 - GR4_BASE + rtos_payload_offset
-    assert bytes(rtos_binary[off_chunk0 : off_chunk0 + 4]) == struct.pack("<I", 0xe3453120)
-    assert bytes(rtos_binary[off_p3_chk : off_p3_chk + 4]) == struct.pack("<I", 0xe3453120)
-    rtos_binary[off_chunk0 : off_chunk0 + 4] = struct.pack("<I", 0xe3453210)
-    rtos_binary[off_p3_chk : off_p3_chk + 4] = struct.pack("<I", 0xe3453210)
-
-    # 3. Patch DF_ID_S & DF_IP destination VAs in LoadDsp:
-    #    0x53966ec0: movt r0, #0x515e (0xe345015e) -> movt r0, #0x524e (0xe345024e)
-    #    0x53966efc: movt r0, #0x515f (0xe345015f) -> movt r0, #0x524f (0xe345024f)
-    off_ids_va = 0x53966ec0 - GR4_BASE + rtos_payload_offset
-    off_ip_va  = 0x53966efc - GR4_BASE + rtos_payload_offset
-    assert bytes(rtos_binary[off_ids_va : off_ids_va + 4]) == struct.pack("<I", 0xe345015e)
-    assert bytes(rtos_binary[off_ip_va  : off_ip_va  + 4]) == struct.pack("<I", 0xe345015f)
-    rtos_binary[off_ids_va : off_ids_va + 4] = struct.pack("<I", 0xe345024e)
-    rtos_binary[off_ip_va  : off_ip_va  + 4] = struct.pack("<I", 0xe345024f)
-
-    # 4. Patch LoadDsp drive letter validation:
-    #    0x53966e24: cmp r3, #5 (0xe3530005) -> cmp r3, #15 (0xe353000f, allows drives 'A'..'P')
-    #    Enables seamless fallback to Ricoh GR4 internal 53GB flash storage ('I':)!
-    off_drv_cmp = 0x53966e24 - GR4_BASE + rtos_payload_offset
-    assert bytes(rtos_binary[off_drv_cmp : off_drv_cmp + 4]) == struct.pack("<I", 0xe3530005)
-    rtos_binary[off_drv_cmp : off_drv_cmp + 4] = struct.pack("<I", 0xe353000f)
+    rtos_binary[p3_off + 8 : p3_off + 16] = struct.pack("<II", 0x00400000, 0x52100000)
+    rtos_binary[p8_off + 8 : p8_off + 16] = struct.pack("<II", 0x00f00000, 0x51200000)
 
     manifest = {
-        "stage": "Stage 3 Deep Learning Inference Pipeline & Live View Tracking Bridge (v1.0.9)",
+        "stage": "Stage 3 Deep Learning Inference Pipeline & Live View Tracking Bridge (v1.2.0)",
+        "baseline": "Official Ricoh GR IV Firmware v1.20",
         "dual_hooks": {
             "hook1_boot_awakening": {
                 "site_vaddr": hex(HOOK1_SITE_VA),
@@ -935,7 +944,7 @@ def apply_stage3_patch(rtos_binary: bytearray, rtos_payload_offset: int = 0) -> 
     return manifest
 
 if __name__ == "__main__":
-    print("[*] Generating Stage 3 Dual-Hook AI Tracking Bridge payloads (v1.0.9)...")
+    print("[*] Generating Stage 3 Dual-Hook AI Tracking Bridge payloads (v1.2.0)...")
     c1 = build_cave1_payload()
     t1 = build_tramp1_payload()
     c2 = build_cave2_payload()
@@ -955,4 +964,4 @@ if __name__ == "__main__":
     for ins in md.disasm(c2, CAVE2_VA):
         print(f"  0x{ins.address:08x}: {ins.mnemonic:<8} {ins.op_str}")
 
-    print("\n[+] Stage 3 Dual-Hook v1.0.9 payload assembled and verified successfully.")
+    print("\n[+] Stage 3 Dual-Hook v1.2.0 payload assembled and verified successfully.")

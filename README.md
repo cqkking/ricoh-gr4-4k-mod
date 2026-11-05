@@ -3,8 +3,8 @@
 [English](README.md) | [简体中文](README_CN.md)
 
 [![Platform: Socionext Milbeaut M10V](https://img.shields.io/badge/Platform-Socionext%20Milbeaut%20M10V-007acc.svg)](#)
-[![Target: Ricoh GR IV v1.11](https://img.shields.io/badge/Target%20Firmware-v1.11%20fwdc248b.bin-green.svg)](#)
-[![Version: v1.0.9](https://img.shields.io/badge/Version-v1.0.9-blue.svg)](#)
+[![Target: Ricoh GR IV v1.20](https://img.shields.io/badge/Target%20Firmware-v1.20%20fwdc248b.bin-green.svg)](#)
+[![Version: v1.2.0](https://img.shields.io/badge/Version-v1.2.0-blue.svg)](#)
 [![Architecture: ARM Cortex-A7 + CEVA-CV DSP](https://img.shields.io/badge/Architecture-ARMv7%20%2B%20CEVA--CV%20DSP-orange.svg)](#)
 [![Status: Pure CEVA-CV CNN Verified](https://img.shields.io/badge/Status-Pure%20CEVA--CV%20CNN%20(Dual%20WordSum%3D0)-brightgreen.svg)](#)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](#)
