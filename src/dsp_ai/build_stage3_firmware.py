@@ -130,7 +130,7 @@ def build_stage3_release():
     # Save release manifest
     manifest = {
         "release_type": "Stage 3 Dual-Hook Deep Learning Inference Pipeline & Live View Tracking Bridge",
-        "version": "1.0.9",
+        "version": "1.1.0",
         "official_fw_sha256": sha256_hex(raw_fw),
         "stage2_preserved_fw": {
             "path": str(STAGE2_FW),
@@ -145,15 +145,17 @@ def build_stage3_release():
         "sd_card_dependencies": sd_manifest["files"],
         "patch_manifest": patch_manifest,
         "runtime_pipeline": {
-            "stock_rom_bugfix": "Patched DspService::LoadDsp (0x53966eb0 & 0x53966ef4) to pass `sub r1, fp, #0x40` (C:\\DF_ID_S.BIN & C:\\DF_IP.BIN) instead of hardcoded A:\\ ROM paths",
+            "stock_rom_bugfix": "Patched DspService::LoadDsp (0x53966eb0 & 0x53966ef4) to pass `sub r1, fp, #0x40` (DF_ID_S.BIN & DF_IP.BIN) with dual-drive polling ('C': SD card, 'I': Internal 53GB flash) and relaxed drive letter check (0x53966e24) up to drive 15",
+            "mmu_and_dsp_base": "Hardware audit verified CEVA-XM4 VLIW instructions require native 0x52100000 base. Swapped Pool[3] (DspFw) to 0x52100000 (4 MB) and Pool[8] (ImageAdjustWork) to 0x51200000 (15 MB), patched ChunkLoader (0x539660c0) & LoadDsp (0x53966de4) base checks to 0x5210, and patched boot vector parameter r1=0x52100000 into DspService::Start",
             "zero_stock_fallback": "FdLibraryService::DetectFace (0x5383ec84, stock FotoNation LibAHFD) is completely disconnected; 100% of LCD AF subject boxes originate from CEVA-CV hardware CNN",
-            "hook1_boot_awakening": "LiveViewProcess3aContoller (0x536520f0) -> Cave 1 (0x53000d60) zeroes STATUS_VA (0x517e0100..0x517e011f) on singleton creation without blocking early-boot 3A init on SD I/O",
-            "hook2_continuous_ai_af": "FaceDetectionService::Task (0x5386ea8c) -> Cave 2 (0x53000e00) uses constructor-zeroed [r4, #0x13e] to initialize boot retry counter (eliminating uninitialized DDR 0x517e0104 bug), waits 20 frames for SD mount, retries LoadDsp('C') every 64 frames up to 30 times (~65s) with mutex unlocked, then runs pure full-time CEVA-CV CNN inference",
+            "hook1_boot_awakening": "LiveViewProcess3aContoller (0x536520f0) -> Cave 1 (0x53000d60) zeroes STATUS_VA (0x52a80100..0x52a8011f) on singleton creation without blocking early-boot 3A init on SD I/O",
+            "hook2_continuous_ai_af": "FaceDetectionService::Task (0x5386ea8c) -> Cave 2 (0x53000e00) uses constructor-zeroed [r4, #0x13e] to initialize boot retry counter, polls SD card ('C') and internal memory ('I'), fixed inverted return check (beq cave2_load_ok), calls StartDsp(r1=0x52100000), then runs pure full-time CEVA-CV CNN inference",
+            "safe_ddr_zones": "All shared buffers relocated to verified unmanaged, fully-mapped DDR (0x52930000..0x53000000): Tensor In @ 0x52940000, Tensor Out @ 0x52949a00, Weights @ 0x52960000..0x52a76220, Msg @ 0x52a80000, Status @ 0x52a80100 - zero collision with RTOS Live View Pool[8]",
             "cold_start_lock": "Seeds [r4, #0x100..0x10c] = (rect_cx, rect_cy, box_size, box_size), [r4, #0x118]/[r4, #0x11c] = face_id, [r4, #0x13c] = 1, [r4, #0x121] = 0, [r4, #0x124] = 0 so SelectMainFace (0x5386dde0) and EVENT 0x04070001 lock instantaneously on Frame 1 from any head pose",
             "frame_source": "Completed Ahip ring descriptor *(*(0x55080350 + 0x424)) dequeued by AhipService::WaitFrame (+0x04/+0x08/+0x0c, fallback *(0x55080350 + 0x1c)) + ARM D-Cache invalidate (0x538f0454) prior to CPU read",
-            "downsampler": "Aspect-ratio-aware ([r4, #0xfc] x [r4, #0xfe]) YUV420 -> 3-plane 56x56 (row stride 64) RGB tensor @ 0x51600000 with C0-continuous 2.0x backlit shadow recovery (Y < 48 -> 2x, 48..144 -> 72 + Y/2) + ARM D-Cache clean/barrier (0x538f04c4)",
-            "dsp_inference": "msg_id 4 via SendMessage (0x539663c0) & WaitMessage (0x539666dc, timeout 100 ms) with full K-3 III weights @ 0x516c0000 (677,824 B) & 0x517657c0 (461,408 B)",
-            "output_heatmap": "Head-priority (fg = max(Ch1, Ch2 - 2)) 3-channel 56x56 (row stride 64) int16_t segmentation map @ 0x51609a00 + D-Cache invalidate (0x538f0454)",
+            "downsampler": "Aspect-ratio-aware ([r4, #0xfc] x [r4, #0xfe]) YUV420 -> 3-plane 56x56 (row stride 64) RGB tensor @ 0x52940000 with C0-continuous 2.0x backlit shadow recovery (Y < 48 -> 2x, 48..144 -> 72 + Y/2) + ARM D-Cache clean/barrier (0x538f04c4)",
+            "dsp_inference": "msg_id 4 via SendMessage (0x539663c0) & WaitMessage (0x539666dc, timeout 100 ms) with full K-3 III weights @ 0x52960000 (677,824 B) & 0x52a057c0 (461,408 B)",
+            "output_heatmap": "Head-priority (fg = max(Ch1, Ch2 - 2)) 3-channel 56x56 (row stride 64) int16_t segmentation map @ 0x52949a00 + D-Cache invalidate (0x538f0454)",
             "confidence_threshold": "max_diff >= 2 and (area_cnt >= 2 or max_diff >= 4)",
             "face_result_structure": "100-byte zeroed m_DetectedFaceResult [r4, #0x78] in aspect-ratio-scaled Q8 fixed-point with dynamic blob-area box sizing [0x2800..0x5c00]",
             "af_tracking_target": "Native dispatch via UpdateFaceDetectionResult (0x5386e0e4); ZERO calls to 0x538e32c4 (CreateTask) and ZERO calls to 0x5383ec84 (LibAHFD)",

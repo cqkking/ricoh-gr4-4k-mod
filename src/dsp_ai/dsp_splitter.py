@@ -4,9 +4,9 @@ dsp_splitter.py - Extract and Format CEVA-CV DSP Binaries for Ricoh GR IV
 
 Splits Pentax K-3 Mark III's 06_DSP.bin into the exact 3-file payload format
 required by Ricoh GR IV RTOS DspService::LoadDsp (0x53966d74):
-  1. DF_EX.BIN   - Executable CEVA-CV vector kernels & runtime (loaded @ 0x51200000)
-  2. DF_ID_S.BIN - Shared vector parameter / CNN weights table (loaded @ 0x515ec000, 64 KB)
-  3. DF_IP.BIN   - Instruction program entry / bootstrap vector (loaded @ 0x515fc000, 16 KB)
+  1. DF_EX.BIN   - Executable CEVA-CV vector kernels & runtime (loaded @ 0x52100000)
+  2. DF_ID_S.BIN - Shared vector parameter / CNN weights table (loaded @ 0x524ec000, 64 KB)
+  3. DF_IP.BIN   - Instruction program entry / bootstrap vector (loaded @ 0x524fc000, 16 KB)
 
 Placing these three files on the SD card root (A:\\) enables instant execution via:
   DSP_load [-S][-V] [driveletter]
@@ -25,7 +25,7 @@ K3_DSP_PATH = REPO_ROOT / "firmware" / "reference" / "k3iii_v220" / "unpacked" /
 K3_RTOS_PATH = REPO_ROOT / "firmware" / "reference" / "k3iii_v220" / "unpacked" / "sections" / "05_RTOS.bin"
 DEFAULT_OUT_DIR = WORKTREE_ROOT / "output" / "sd_card"
 
-CHUNK_DEST_VA = 0x51200000
+CHUNK_DEST_VA = 0x52100000
 SPLIT_OFF_ID_S = 0x003ec000
 SIZE_ID_S = 0x00010000  # 64 KB
 SPLIT_OFF_IP = 0x003fc000
@@ -33,12 +33,13 @@ SIZE_IP = 0x00004000    # 16 KB
 TOTAL_DSP_SIZE = 0x00400000 # 4 MB
 
 # K-3 III CNN Weights + Mean Table in 05_RTOS.bin (0x53932548 .. 0x53a48768)
-# Loaded as Chunk 1 of DF_EX.BIN @ 0x516c0000 by GR4 DspService::LoadEx (0x53965ff8)
+# Loaded as Chunk 1 of DF_EX.BIN @ 0x52960000 by GR4 DspService::LoadEx (0x53965ff8)
+# Safely located in 0x52930000..0x53000000 unallocated DDR (outside any RTOS heap!)
 K3_RTOS_BASE = 0x52500000
 K3_WEIGHTS_START_VA = 0x53932548
 K3_WEIGHTS_END_VA   = 0x53a48768
 K3_WEIGHTS_SIZE     = K3_WEIGHTS_END_VA - K3_WEIGHTS_START_VA # 0x116220 (1,139,232 B)
-CHUNK1_DEST_VA      = 0x516c0000
+CHUNK1_DEST_VA      = 0x52960000
 
 def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -70,11 +71,11 @@ def extract_dsp_files(
     #   Header (16 bytes): uint32 num_chunks (2), uint32 res[3] (0, 0, 0)
     #   Chunk 0 header (8 bytes):
     #     [fp, #-0x48] = uint32 chunk_len (0x003ec000)
-    #     [fp, #-0x44] = uint32 dest_va   (0x51200000, verified against sb=0x51200000 @ 0x53966144!)
+    #     [fp, #-0x44] = uint32 dest_va   (0x52100000)
     #   Chunk 0 payload: 0x3ec000 bytes (CEVA-CV executable & vector kernels)
     #   Chunk 1 header (8 bytes):
     #     [fp, #-0x48] = uint32 chunk_len (0x00116220 = 1,139,232 B)
-    #     [fp, #-0x44] = uint32 dest_va   (0x516c0000)
+    #     [fp, #-0x44] = uint32 dest_va   (0x52960000)
     #   Chunk 1 payload: 0x116220 bytes (Full K-3 III Mean + Backbone + Head CNN weights)
     ex_payload = dsp_bytes[0:SPLIT_OFF_ID_S]
     ex_hdr = struct.pack("<IIII", 2, 0, 0, 0)

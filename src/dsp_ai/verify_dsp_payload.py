@@ -5,7 +5,7 @@ verify_dsp_payload.py - Dual-Direction Validation of CEVA-CV DSP Binaries
 Validates:
   1. Chunk format of DF_EX.BIN against GR4 RTOS DspService::LoadDsp (0x53965ff8) parser.
   2. Byte-perfect reconstruction: checks that memory reconstructed from
-     DF_EX.BIN (0x51200000), DF_ID_S.BIN (0x515ec000), and DF_IP.BIN (0x515fc000)
+     DF_EX.BIN (0x52100000), DF_ID_S.BIN (0x524ec000), and DF_IP.BIN (0x524fc000)
      identically matches the K-3 III 06_DSP.bin image.
   3. CEVA vector entry table verification at 0x000000 and 0x3ec000.
 """
@@ -47,19 +47,19 @@ def verify_dsp():
     assert num_chunks == 2, f"Expected 2 chunks, got {num_chunks}"
     assert (r1, r2, r3) == (0, 0, 0), "Reserved header bytes must be 0"
 
-    # Check Chunk 0 descriptor: [fp, #-0x48] = chunk_len, [fp, #-0x44] = dest_va (0x51200000)
+    # Check Chunk 0 descriptor: [fp, #-0x48] = chunk_len, [fp, #-0x44] = dest_va (0x52100000)
     chunk0_len, chunk0_va = struct.unpack_from("<II", df_ex, 16)
-    assert chunk0_va == 0x51200000, f"Expected Chunk 0 VA 0x51200000, got {hex(chunk0_va)}"
+    assert chunk0_va == 0x52100000, f"Expected Chunk 0 VA 0x52100000, got {hex(chunk0_va)}"
     assert chunk0_len == 0x3ec000, f"Expected Chunk 0 len 0x3ec000, got {hex(chunk0_len)}"
 
-    # Check Chunk 1 descriptor: [fp, #-0x48] = chunk_len (0x116220), [fp, #-0x44] = dest_va (0x516c0000)
+    # Check Chunk 1 descriptor: [fp, #-0x48] = chunk_len (0x116220), [fp, #-0x44] = dest_va (0x52960000)
     chunk1_hdr_off = 16 + 8 + chunk0_len
     chunk1_len, chunk1_va = struct.unpack_from("<II", df_ex, chunk1_hdr_off)
-    assert chunk1_va == 0x516c0000, f"Expected Chunk 1 VA 0x516c0000, got {hex(chunk1_va)}"
+    assert chunk1_va == 0x52960000, f"Expected Chunk 1 VA 0x52960000, got {hex(chunk1_va)}"
     assert chunk1_len == K3_WEIGHTS_SIZE, f"Expected Chunk 1 len {hex(K3_WEIGHTS_SIZE)}, got {hex(chunk1_len)}"
     assert len(df_ex) == chunk1_hdr_off + 8 + chunk1_len, "DF_EX file size does not match header declaration"
 
-    print("[3/3] Reconstructing DSP memory 0x51200000..0x51600000 & CNN Weights 0x516c0000..0x517d6220...")
+    print("[3/3] Reconstructing DSP memory 0x52100000..0x52500000 & CNN Weights 0x52960000..0x52a76220...")
     reconstructed = bytearray(0x400000)
     # 0x000000 .. 0x3ec000 from DF_EX Chunk 0
     reconstructed[0 : 0x3ec000] = df_ex[24 : 24 + chunk0_len]
@@ -73,10 +73,10 @@ def verify_dsp():
     assert chunk1_data == weights_orig, "K-3 III CNN weights reconstruction mismatch!"
 
     print("[+] PASS: 100% byte-perfect reconstruction verified across all 5,333,536 bytes.")
-    print("    - DF_EX.BIN Chunk 0 matches 06_DSP.bin[0x000000..0x3ec000] -> 0x51200000")
-    print("    - DF_EX.BIN Chunk 1 matches K-3 III CNN Weights (1,139,232 B) -> 0x516c0000")
-    print("    - DF_ID_S.BIN       matches 06_DSP.bin[0x3ec000..0x3fc000] -> 0x515ec000")
-    print("    - DF_IP.BIN         matches 06_DSP.bin[0x3fc000..0x400000] -> 0x515fc000")
+    print("    - DF_EX.BIN Chunk 0 matches 06_DSP.bin[0x000000..0x3ec000] -> 0x52100000")
+    print("    - DF_EX.BIN Chunk 1 matches K-3 III CNN Weights (1,139,232 B) -> 0x52960000")
+    print("    - DF_ID_S.BIN       matches 06_DSP.bin[0x3ec000..0x3fc000] -> 0x524ec000")
+    print("    - DF_IP.BIN         matches 06_DSP.bin[0x3fc000..0x400000] -> 0x524fc000")
     return True
 
 if __name__ == "__main__":

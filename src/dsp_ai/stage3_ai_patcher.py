@@ -40,13 +40,14 @@ DESC_TABLE_VA      = 0x53001400 # 728 B table placed after code cave (ends @ 0x5
 MEAN_TABLE_VA      = 0x541db540 # Backward compatibility constant (9,408 B in ROM zero cave)
 STD_TABLE_VA       = 0x54217680 # Backward compatibility constant (9,408 B in ROM zero cave)
 
-# Non-Overlapping DSP Shared DRAM Layout (0x51600000 .. 0x517e0200)
-TENSOR_IN_VA       = 0x51600000 # work_buf (0xbde40 B): 3-plane 56x56 (stride 64) RGB input @ +0x0000, +0x0e00, +0x1c00
-TENSOR_OUT_VA      = 0x51609a00 # work_buf + 0x9a00: 3-channel 56x56 (stride 64) int16_t segmentation output
-MEAN_WEIGHTS_VA    = 0x516c0000 # Full K-3 III 0x53932548..0x539d7d08 block (677,824 B) loaded by DF_EX.BIN Chunk 1
-HEAD_WEIGHTS_VA    = 0x517657c0 # Full K-3 III 0x539d7d08..0x53a48768 block (461,408 B) loaded by DF_EX.BIN Chunk 1
-TENSOR_MSG_VA      = 0x517e0000 # 40-byte (0x28 B) DspCommandParameter buffer (outside work_buf!)
-STATUS_VA          = 0x517e0100 # Telemetry & one-shot wakeup guard in DSP shared DRAM (outside work_buf!)
+# Non-Overlapping DSP Shared DRAM Layout (0x52940000 .. 0x52a90000)
+# Safely relocated to 0x52930000..0x53000000 unallocated DDR (outside any RTOS heap!)
+TENSOR_IN_VA       = 0x52940000 # work_buf (0xbde40 B): 3-plane 56x56 (stride 64) RGB input @ +0x0000, +0x0e00, +0x1c00
+TENSOR_OUT_VA      = 0x52949a00 # work_buf + 0x9a00: 3-channel 56x56 (stride 64) int16_t segmentation output
+MEAN_WEIGHTS_VA    = 0x52960000 # Full K-3 III 0x53932548..0x539d7d08 block (677,824 B) loaded by DF_EX.BIN Chunk 1
+HEAD_WEIGHTS_VA    = 0x52a057c0 # Full K-3 III 0x539d7d08..0x53a48768 block (461,408 B) loaded by DF_EX.BIN Chunk 1
+TENSOR_MSG_VA      = 0x52a80000 # 40-byte (0x28 B) DspCommandParameter buffer (outside work_buf!)
+STATUS_VA          = 0x52a80100 # Telemetry & one-shot wakeup guard in DSP shared DRAM (outside work_buf!)
 
 # Firmware Services & Entry Points
 GET_DSP_SVC_VA     = 0x539658c4 # DspFactory::GetDspService()
@@ -245,20 +246,34 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe313003f) # tst  r3, #0x3f  (retry on ticks 20, 84, 148, ...)
     branch_to("ai_done", is_bl=False, cond=0x1) # bne .ai_done
 
-    # Unlock FaceDetectionService mutex (r4 + 0x48) BEFORE SD Card I/O
+    # Unlock FaceDetectionService mutex (r4 + 0x48) BEFORE Storage/SD I/O
     insns.append(0xe2840048) # add  r0, r4, #0x48
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, UNLOCK_MUTEX_VA, is_bl=True))
 
-    insns.append(0xe1a00005) # mov  r0, r5
+    # Dual-Drive Polling: Try Drive 'C' (SD Card) first, then Drive 'I' (Internal 53GB Flash)
+    insns.append(0xe1a00005) # mov  r0, r5 (m_dspService)
     insns.append(0xe3a01043) # mov  r1, #0x43 ('C' -> Drive C:\ on SD Card)
     insns.append(0xe3a02000) # mov  r2, #0
     insns.append(0xe3a03000) # mov  r3, #0
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, LOAD_DSP_VA, is_bl=True))
 
-    insns.append(0xe3500000) # cmp  r0, #0 (check actual LoadDsp return value!)
-    branch_to("cave2_load_ok", is_bl=False, cond=0x1) # bne .cave2_load_ok
+    insns.append(0xe3500000) # cmp  r0, #0 (0 is SUCCESS in DspService::LoadDsp!)
+    branch_to("cave2_load_ok", is_bl=False, cond=0x0) # beq .cave2_load_ok
+
+    # If Drive 'C' failed, try Drive 'I' (Built-in 53GB Memory)
+    insns.append(0xe1a00005) # mov  r0, r5 (m_dspService)
+    insns.append(0xe3a01049) # mov  r1, #0x49 ('I' -> Drive I:\ on Built-in 53GB Flash)
+    insns.append(0xe3a02000) # mov  r2, #0
+    insns.append(0xe3a03000) # mov  r3, #0
+    curr_pc = cave_va + len(insns) * 4
+    insns.append(encode_arm_branch(curr_pc, LOAD_DSP_VA, is_bl=True))
+
+    insns.append(0xe3500000) # cmp  r0, #0
+    branch_to("cave2_load_ok", is_bl=False, cond=0x0) # beq .cave2_load_ok
+
+    # Both C:\ and I:\ failed: clear false LOADED bit and return
     insns.append(0xe3a02000) # mov  r2, #0
     insns.append(0xe5852004) # str  r2, [r5, #4] (clear false LOADED bit)
     # Re-lock FaceDetectionService mutex (r4 + 0x48) before returning to ai_done
@@ -270,8 +285,10 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     branch_to("ai_done", is_bl=False, cond=0xe) # b .ai_done
 
     mark_label("cave2_load_ok")
+    # Start CEVA-CV DSP at native K-3 III base address 0x52100000!
+    # DspService::Start(svc, boot_addr=0x52100000, 0) writes 0x52100000 to MMIO [0x1f000014]
     insns.append(0xe1a00005) # mov  r0, r5
-    insns.append(0xe3a01000) # mov  r1, #0
+    emit_ldr_imm32(insns, 1, 0x52100000) # mov  r1, #0x52100000 (DSP boot address)
     insns.append(0xe3a02000) # mov  r2, #0
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, START_DSP_VA, is_bl=True))
@@ -802,6 +819,49 @@ def apply_stage3_patch(rtos_binary: bytearray, rtos_payload_offset: int = 0) -> 
         s_off = str_va - GR4_BASE + rtos_payload_offset
         assert rtos_binary[s_off] == 0x41, f"Expected 'A' at {hex(str_va)}"
         rtos_binary[s_off] = 0x43 # 'C' ("C:\DF_*.BIN")
+
+    # ---------------------------------------------------------------------
+    # Full-Pipeline Binary Coherence Patches (v1.1.0)
+    # ---------------------------------------------------------------------
+    # 1. Reconfigure ROM .data Memory Pool Table:
+    #    Swap Pool[3] (DspFw) to native K-3 III DSP address 0x52100000 (4 MB),
+    #    and reallocate Pool[8] (ImageAdjustWork) to 0x51200000..0x52100000 (15 MB),
+    #    completely isolating live RTOS LiveView heap from the DSP execution area!
+    DATA_LMA = 0x5437b640
+    pool3_off = (DATA_LMA - GR4_BASE) + (0x55019e0c - 0x55000000) + rtos_payload_offset
+    pool8_off = (DATA_LMA - GR4_BASE) + (0x55019e5c - 0x55000000) + rtos_payload_offset
+
+    assert bytes(rtos_binary[pool3_off + 4 : pool3_off + 12]) == struct.pack("<II", 0x00400000, 0x51200000)
+    assert bytes(rtos_binary[pool8_off + 4 : pool8_off + 12]) == struct.pack("<II", 0x01210000, 0x51600000)
+
+    rtos_binary[pool3_off + 4 : pool3_off + 12] = struct.pack("<II", 0x00400000, 0x52100000)
+    rtos_binary[pool8_off + 4 : pool8_off + 12] = struct.pack("<II", 0x00f00000, 0x51200000)
+
+    # 2. Patch ChunkLoader (0x539660c0) & DspService::LoadDsp (0x53966de4) base checks:
+    #    movt r3, #0x5120 (0xe3453120) -> movt r3, #0x5210 (0xe3453210)
+    off_chunk0 = 0x539660c0 - GR4_BASE + rtos_payload_offset
+    off_p3_chk = 0x53966de4 - GR4_BASE + rtos_payload_offset
+    assert bytes(rtos_binary[off_chunk0 : off_chunk0 + 4]) == struct.pack("<I", 0xe3453120)
+    assert bytes(rtos_binary[off_p3_chk : off_p3_chk + 4]) == struct.pack("<I", 0xe3453120)
+    rtos_binary[off_chunk0 : off_chunk0 + 4] = struct.pack("<I", 0xe3453210)
+    rtos_binary[off_p3_chk : off_p3_chk + 4] = struct.pack("<I", 0xe3453210)
+
+    # 3. Patch DF_ID_S & DF_IP destination VAs in LoadDsp:
+    #    0x53966ec0: movt r0, #0x515e (0xe345015e) -> movt r0, #0x524e (0xe345024e)
+    #    0x53966efc: movt r0, #0x515f (0xe345015f) -> movt r0, #0x524f (0xe345024f)
+    off_ids_va = 0x53966ec0 - GR4_BASE + rtos_payload_offset
+    off_ip_va  = 0x53966efc - GR4_BASE + rtos_payload_offset
+    assert bytes(rtos_binary[off_ids_va : off_ids_va + 4]) == struct.pack("<I", 0xe345015e)
+    assert bytes(rtos_binary[off_ip_va  : off_ip_va  + 4]) == struct.pack("<I", 0xe345015f)
+    rtos_binary[off_ids_va : off_ids_va + 4] = struct.pack("<I", 0xe345024e)
+    rtos_binary[off_ip_va  : off_ip_va  + 4] = struct.pack("<I", 0xe345024f)
+
+    # 4. Patch LoadDsp drive letter validation:
+    #    0x53966e24: cmp r3, #5 (0xe3530005) -> cmp r3, #15 (0xe353000f, allows drives 'A'..'P')
+    #    Enables seamless fallback to Ricoh GR4 internal 53GB flash storage ('I':)!
+    off_drv_cmp = 0x53966e24 - GR4_BASE + rtos_payload_offset
+    assert bytes(rtos_binary[off_drv_cmp : off_drv_cmp + 4]) == struct.pack("<I", 0xe3530005)
+    rtos_binary[off_drv_cmp : off_drv_cmp + 4] = struct.pack("<I", 0xe353000f)
 
     manifest = {
         "stage": "Stage 3 Deep Learning Inference Pipeline & Live View Tracking Bridge (v1.0.9)",
