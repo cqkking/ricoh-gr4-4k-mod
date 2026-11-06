@@ -25,20 +25,26 @@ Version **v1.2.0** represents a major architectural milestone: rebasing the enti
    - In prior revisions, `beq cave2_load_ok` mistakenly checked for `0`, causing successful SD card loads to be misidentified as failures, aborting initialization and falling back.
    - Fixed to `cmp r0, #0; bne cave2_load_ok`, ensuring instant, reliable startup when SD card binaries are loaded.
 
-3. **Stock v1.20 ROM Bug Fix in `LoadDsp`**:
+3. **Elimination of Fatal Infinite Hang in `DspService::Test` (`tk_wai_flg`)**:
+   - Disassembly revealed that `DspService::Test` (`0x5398efd0`) was invoked in `cave2_load_ok`. This function executes an uninterruptible kernel wait `tk_wai_flg(0x3f0000)` with timeout 0 (infinite wait).
+   - Because the operational K-3 III CNN runtime (`DF_EX.BIN`) never fires factory diagnostic loopback event flag `0x3f0000`, `FaceDetectionService::Task` became permanently blocked, triggering the RTOS watchdog / 3A scheduler to freeze or crash the camera within ~2 seconds of booting whenever SD card files were loaded.
+   - Fully removed the `DspService::Test` call from Cave 2. After `DspService::Start`, the patch now re-locks the mutex and cleanly yields the remainder of the load frame (`b .ai_done`), allowing the DSP hardware to complete its CRT0 boot sequence cleanly.
+   - On the very next frame (and all frames thereafter), the STARTED bit (`0x4`) is already set, immediately jumping to `dsp_is_running` to continuously drive CNN inference.
+
+4. **Stock v1.20 ROM Bug Fix in `LoadDsp`**:
    - In official v1.20, Ricoh engineers partially modified `LoadDsp` by formatting `"C:\DF_ID_S.BIN"` on stack (`strb r7, [fp, #-0x40]`), but still passed static ROM pointers `0x5433ffac` and `0x5433ff9c` (`"A:\..."`) into the file loading routine.
    - v1.2.0 patches both call arguments to pass `sub r1, fp, #0x40` AND patches the ROM drive letters from `'A'` to `'C'`, ensuring 100% reliable SD card mounting.
 
-4. **v1.20 AHIP Ring Buffer Descriptors & Cache Invalidation**:
+5. **v1.20 AHIP Ring Buffer Descriptors & Cache Invalidation**:
    - AHIP driver base shifted to `0x550813d0` in v1.20.
    - Primary completed frame ring descriptor located at `[r3, #0x434]`, with automatic fallback to `[r3, #0x424]` and legacy nodes (`0x1c` / `0x14`).
    - Guaranteed ARM D-Cache invalidation (`0x5391801c`) prior to CPU downsampler ingestion.
 
-5. **Pure Full-Time CEVA-CV AI AF**:
+6. **Pure Full-Time CEVA-CV AI AF**:
    - Stock FotoNation `LibAHFD` (`0x53866594`) is completely bypassed.
    - 100% of face and subject boxes displayed on the LCD are guaranteed to originate from the CEVA-CV hardware vector DSP running Pentax K-3 III's deep learning CNN.
 
-6. **Preserved Stage 2 Binary**:
+7. **Preserved Stage 2 Binary**:
    - `output/fwdc248b_stage2_dsp_wake.bin` remains 100% untouched and preserved.
 
 ---
@@ -47,8 +53,8 @@ Version **v1.2.0** represents a major architectural milestone: rebasing the enti
 
 | File | Size (Bytes) | SHA-256 | Description |
 | :--- | :--- | :--- | :--- |
-| **`output/fwdc248b.bin`** | 39,109,096 | `8881bad712b5a3b33a72fd41f7d072070bf986893ec39c966f793c1134990359` | Active Flashable v1.2.0 Firmware |
-| **`output/fwdc248b_stage3_ai_track.bin`** | 39,109,096 | `8881bad712b5a3b33a72fd41f7d072070bf986893ec39c966f793c1134990359` | Preserved Stage 3 Firmware Release |
+| **`output/fwdc248b.bin`** | 39,109,096 | `a7d820661bd001cdd029352b45e466780c519140dd997151d0004c08711b8fe3` | Active Flashable v1.2.0 Firmware |
+| **`output/fwdc248b_stage3_ai_track.bin`** | 39,109,096 | `a7d820661bd001cdd029352b45e466780c519140dd997151d0004c08711b8fe3` | Preserved Stage 3 Firmware Release |
 | **`output/fwdc248b_stage2_dsp_wake.bin`** | 38,693,256 | `ed8c4e2414ffd66e270bb308a3d3c932a4de8300e57e6cc0fb1fc8f0fffd836e` | Preserved Stage 2 Firmware (Untouched) |
 | **`output/sd_card/DF_EX.BIN`** | 5,251,648 | `b16788a16a11ecc2c007d26888a56195b2b4e1bec8aa05b74ea6789803ae8d44` | CEVA-CV DSP Core + Full K-3 III CNN Weights |
 | **`output/sd_card/DF_ID_S.BIN`** | 65,536 | `3d3ebf29622323bb4a203347feaf676aeac110a7b1181604270a1ae0c22b0a2a` | DSP Instruction DRAM Overlay |

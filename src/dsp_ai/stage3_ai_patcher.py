@@ -60,7 +60,7 @@ STATUS_VA              = 0x52a80100 # Telemetry & one-shot wakeup guard in DSP s
 GET_DSP_SVC_VA         = 0x5398d97c # DspFactory::GetDspService() -> singleton struct @ 0x553a3160
 LOAD_DSP_VA            = 0x5398ee2c # DspService::LoadDsp(svc, 'C', 0, 0)
 START_DSP_VA           = 0x5398e2cc # DspService::Start(svc, boot_addr=0x52100000, 0)
-TEST_DSP_VA            = 0x5398efd0 # DspService::Test(svc, 0)
+TEST_DSP_VA            = 0x5398efd0 # DspService::Test(svc, 0) - DO NOT CALL: factory diagnostic loopback that hangs in tk_wai_flg(0x3f0000)
 SEND_MSG_VA            = 0x5398e478 # DspService::SendMessage(svc, &seq, 4, timeout, &msg)
 WAIT_MSG_VA            = 0x5398e794 # DspService::WaitMessage(svc, seq, timeout, &resp)
 FD_LIB_DETECT_VA       = 0x53866594 # FdLibraryService::DetectFace() (stock FotoNation LibAHFD detect entry)
@@ -307,11 +307,7 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, START_DSP_VA, is_bl=True))
 
-    insns.append(0xe1a00005) # mov  r0, r5
-    insns.append(0xe3a01000) # mov  r1, #0
-    curr_pc = cave_va + len(insns) * 4
-    insns.append(encode_arm_branch(curr_pc, TEST_DSP_VA, is_bl=True))
-
+    emit_ldr_imm32(insns, 8, STATUS_VA)
     emit_ldr_imm32(insns, 1, 0x41564543) # 'CEVA'
     insns.append(0xe5881000) # str  r1, [r8, #0]
     # Re-lock FaceDetectionService mutex (r4 + 0x48)
@@ -321,10 +317,13 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, LOCK_MUTEX_VA, is_bl=True))
 
-    # Verify STARTED bit (0x4) is now set before dispatching messages
+    # Verify STARTED bit (0x4) is now set
     insns.append(0xe5952004) # ldr  r2, [r5, #4]
     insns.append(0xe3120004) # tst  r2, #4
     branch_to("ai_done", is_bl=False, cond=0x0) # beq .ai_done
+
+    # Yield current frame to let CEVA DSP core complete boot sequence cleanly
+    branch_to("ai_done", is_bl=False, cond=0xe) # b .ai_done
 
     mark_label("dsp_is_running")
 
