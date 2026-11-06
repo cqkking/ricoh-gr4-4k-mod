@@ -1,7 +1,7 @@
 {
-  "schema_version": 3,
+  "schema_version": 4,
   "codec": "h264",
-  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (3072x1728 Direct Output + Movie SR Restored)",
+  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (Route 1: FHD Pipeline Hijack to 3072x1728)",
   "target": {
     "model": "GR IV Standard Edition",
     "firmware_version": "1.20",
@@ -10,66 +10,129 @@
   },
   "changes": [
     {
-      "id": "is_debug_4k_movie_enable",
-      "description": "Enable native K-3 III 4K movie pipeline gate at LiveViewDebug::IsDebug4KMovie (mov r0, #1; bx lr)",
-      "vaddr": "0x538ad500",
-      "offset": "0x8c5228",
-      "expected_hex": "0000a0e31eff2fe1",
-      "replacement_hex": "0100a0e31eff2fe1",
+      "id": "fhd_to_3k_width_getter_1",
+      "description": "WidthGetter1 FHD branch (0x538997ec): mov r0, #0xc00 (3072 px width)",
+      "vaddr": "0x538997ec",
+      "offset": "0x8b1514",
+      "expected_hex": "1e0da0e3",
+      "replacement_hex": "0c0ca0e3",
+      "length": 4
+    },
+    {
+      "id": "fhd_to_3k_width_getter_2",
+      "description": "WidthGetter2 FHD branch (0x5389982c): mov r0, #0xc00 (3072 px width)",
+      "vaddr": "0x5389982c",
+      "offset": "0x8b1554",
+      "expected_hex": "1e0da0e3",
+      "replacement_hex": "0c0ca0e3",
+      "length": 4
+    },
+    {
+      "id": "fhd_to_3k_height_getter_16_9",
+      "description": "HeightGetter FHD 16:9 branch (0x5389989c): movw r0, #0x6c0 (1728 px height)",
+      "vaddr": "0x5389989c",
+      "offset": "0x8b15c4",
+      "expected_hex": "380400e3",
+      "replacement_hex": "c00600e3",
+      "length": 4
+    },
+    {
+      "id": "fhd_to_3k_height_getter_alt",
+      "description": "HeightGetter FHD aligned branch (0x538998a4): movw r0, #0x6c0 (1728 px height)",
+      "vaddr": "0x538998a4",
+      "offset": "0x8b15cc",
+      "expected_hex": "110da0e3",
+      "replacement_hex": "c00600e3",
+      "length": 4
+    },
+    {
+      "id": "fhd_to_3k_codec_width",
+      "description": "CodecWidthGetter FHD branch (0x53898f88): mov r0, #0xc00 (3072 px width)",
+      "vaddr": "0x53898f88",
+      "offset": "0x8b0cb0",
+      "expected_hex": "1e0da0e3",
+      "replacement_hex": "0c0ca0e3",
+      "length": 4
+    },
+    {
+      "id": "fhd_to_3k_buffer_size",
+      "description": "BufferGetter FHD branch (0x53898fa4): redirect to 8MB buffer setup (0x53898fbc)",
+      "vaddr": "0x53898fa4",
+      "offset": "0x8b0ccc",
+      "expected_hex": "0800000a",
+      "replacement_hex": "0400000a",
+      "length": 4
+    },
+    {
+      "id": "fhd_to_3k_subbuffer_size",
+      "description": "SubBufferGetter FHD branch (0x53898fe8): redirect to 4MB sub-buffer setup (0x53899000)",
+      "vaddr": "0x53898fe8",
+      "offset": "0x8b0d10",
+      "expected_hex": "0700000a",
+      "replacement_hex": "0400000a",
+      "length": 4
+    },
+    {
+      "id": "fhd_to_3k_codec_init_branch",
+      "description": "CodecParamInit FHD branch (0x538990f8): redirect to 3K parameter setup (0x5389959c)",
+      "vaddr": "0x538990f8",
+      "offset": "0x8b0e20",
+      "expected_hex": "0500000a",
+      "replacement_hex": "2701000a",
+      "length": 4
+    },
+    {
+      "id": "fhd_to_3k_codec_init_width",
+      "description": "CodecParamInit width setup (0x538995a0): mov r2, #0xc00 (3072 px)",
+      "vaddr": "0x538995a0",
+      "offset": "0x8b12c8",
+      "expected_hex": "0f2ca0e3",
+      "replacement_hex": "0c2ca0e3",
+      "length": 4
+    },
+    {
+      "id": "fhd_to_3k_table_display_1",
+      "description": "Display resolution table 1 FHD entry (0x54079508): 3072 x 1728 x2",
+      "vaddr": "0x54079508",
+      "offset": "0x1091230",
+      "expected_hex": "8007380480073804",
+      "replacement_hex": "000cc006000cc006",
       "length": 8
     },
     {
-      "id": "lv_defect_a_cmp_60p",
-      "description": "LiveView 4K buffer check: cmp r0, #0 (test for 60p=0 instead of 30p=1)",
-      "vaddr": "0x53652e70",
-      "offset": "0x66ab98",
-      "expected_hex": "010050e3",
-      "replacement_hex": "000050e3",
-      "length": 4
-    },
-    {
-      "id": "lv_defect_a_beq_fhd",
-      "description": "LiveView 4K buffer branch: beq 0x53652de4 (only 60p takes FHD path; 30p/24p take 4K path)",
-      "vaddr": "0x53652e78",
-      "offset": "0x66aba0",
-      "expected_hex": "d9ffff1a",
-      "replacement_hex": "d9ffff0a",
-      "length": 4
-    },
-    {
-      "id": "lv_defect_a_bool_is4k",
-      "description": "LiveView 4K flag argument: mov r3, #1 (pass boolean is4K=1 for both 30p and 24p)",
-      "vaddr": "0x53652e9c",
-      "offset": "0x66abc4",
-      "expected_hex": "0530a0e1",
-      "replacement_hex": "0130a0e3",
-      "length": 4
-    },
-    {
-      "id": "lv_defect_b_struct_offset",
-      "description": "Align m_is4KLiveView reader offset [r3, #0x55e] -> [r3, #0x564] to match writer",
-      "vaddr": "0x5365c7c8",
-      "offset": "0x6744f0",
-      "expected_hex": "5e35d3e5",
-      "replacement_hex": "6435d3e5",
-      "length": 4
-    },
-    {
-      "id": "lv_defect_c_plan4_plan5_jt",
-      "description": "Redirect LiveViewSequencePlanner Plan 4 & Plan 5 assert stubs to Plan 3 (0x5366e238)",
-      "vaddr": "0x5366e180",
-      "offset": "0x685ea8",
-      "expected_hex": "4ce2665380e26653",
-      "replacement_hex": "38e2665338e26653",
+      "id": "fhd_to_3k_table_display_2",
+      "description": "ScreenLcdParameter table 2 FHD entry 1 (0x54079568): 3072 x 1728 x2",
+      "vaddr": "0x54079568",
+      "offset": "0x1091290",
+      "expected_hex": "8007380480073804",
+      "replacement_hex": "000cc006000cc006",
       "length": 8
     },
     {
-      "id": "full_fov_sensor_mode_5_6_cis3",
-      "description": "Map Sensor Modes 5 (24p) & 6 (30p) to CIS Mode 3 (0x53671a68: Full APS-C sensor readout, zero crop)",
-      "vaddr": "0x536717ec",
-      "offset": "0x689514",
-      "expected_hex": "941a6753941a6753",
-      "replacement_hex": "681a6753681a6753",
+      "id": "fhd_to_3k_table_display_3",
+      "description": "ScreenLcdParameter table 2 FHD entry 2 (0x54079578): 3072 x 1728 x2",
+      "vaddr": "0x54079578",
+      "offset": "0x10912a0",
+      "expected_hex": "8007380480073804",
+      "replacement_hex": "000cc006000cc006",
+      "length": 8
+    },
+    {
+      "id": "fhd_to_3k_table_16bit",
+      "description": "Static resolution table 16-bit FHD entry (0x53fd8bec): 3072 x 1728",
+      "vaddr": "0x53fd8bec",
+      "offset": "0xff0914",
+      "expected_hex": "80073804",
+      "replacement_hex": "000cc006",
+      "length": 4
+    },
+    {
+      "id": "fhd_to_3k_table_32bit",
+      "description": "Static resolution table 32-bit FHD entry (0x53de99e4): 3072 x 1728",
+      "vaddr": "0x53de99e4",
+      "offset": "0xe0170c",
+      "expected_hex": "8007000038040000",
+      "replacement_hex": "000c0000c0060000",
       "length": 8
     },
     {
@@ -80,96 +143,6 @@
       "expected_hex": "a8406610",
       "replacement_hex": "86404810",
       "length": 4
-    },
-    {
-      "id": "3k_width_getter_1",
-      "description": "WidthGetter1 (0x538997e0): moveq r0, #0xc00 (3072 px width)",
-      "vaddr": "0x538997e0",
-      "offset": "0x8b1508",
-      "expected_hex": "0f0ca003",
-      "replacement_hex": "0c0ca003",
-      "length": 4
-    },
-    {
-      "id": "3k_width_getter_2",
-      "description": "WidthGetter2 (0x53899820): moveq r0, #0xc00 (3072 px width)",
-      "vaddr": "0x53899820",
-      "offset": "0x8b1548",
-      "expected_hex": "0f0ca003",
-      "replacement_hex": "0c0ca003",
-      "length": 4
-    },
-    {
-      "id": "3k_height_getter_16_9",
-      "description": "HeightGetter 16:9 (0x5389986c): moveq r0, #0x6c0 (1728 px height)",
-      "vaddr": "0x5389986c",
-      "offset": "0x8b1594",
-      "expected_hex": "870ea003",
-      "replacement_hex": "6c0ea003",
-      "length": 4
-    },
-    {
-      "id": "3k_height_getter_default",
-      "description": "HeightGetter Default (0x53899890): moveq r0, #0x6c0 (1728 px height)",
-      "vaddr": "0x53899890",
-      "offset": "0x8b15b8",
-      "expected_hex": "220da003",
-      "replacement_hex": "6c0ea003",
-      "length": 4
-    },
-    {
-      "id": "3k_codec_width_getter",
-      "description": "CodecWidthGetter (0x53898f7c): moveq r0, #0xc00 (3072 px width)",
-      "vaddr": "0x53898f7c",
-      "offset": "0x8b0ca4",
-      "expected_hex": "0f0ca003",
-      "replacement_hex": "0c0ca003",
-      "length": 4
-    },
-    {
-      "id": "3k_codec_param_init_width",
-      "description": "CodecParamInit (0x538995a0): mov r2, #0xc00 (3072 px width)",
-      "vaddr": "0x538995a0",
-      "offset": "0x8b12c8",
-      "expected_hex": "0f2ca0e3",
-      "replacement_hex": "0c2ca0e3",
-      "length": 4
-    },
-    {
-      "id": "3k_static_table_32bit",
-      "description": "Static resolution table 32-bit (0x53de99a8): 3072 x 1728",
-      "vaddr": "0x53de99a8",
-      "offset": "0xe016d0",
-      "expected_hex": "000f000070080000",
-      "replacement_hex": "000c0000c0060000",
-      "length": 8
-    },
-    {
-      "id": "3k_static_table_16bit",
-      "description": "Static resolution table 16-bit (0x53fd8bd8): 3072 x 1728",
-      "vaddr": "0x53fd8bd8",
-      "offset": "0xff0900",
-      "expected_hex": "000f7008",
-      "replacement_hex": "000cc006",
-      "length": 4
-    },
-    {
-      "id": "3k_display_table_1",
-      "description": "Display resolution table 1 (0x54079510): 3072 x 1728 x2",
-      "vaddr": "0x54079510",
-      "offset": "0x1091238",
-      "expected_hex": "000f7008000f7008",
-      "replacement_hex": "000cc006000cc006",
-      "length": 8
-    },
-    {
-      "id": "3k_display_table_2",
-      "description": "ScreenLcdParameter table 2 (0x54079588): 3072 x 1728 x2",
-      "vaddr": "0x54079588",
-      "offset": "0x10912b0",
-      "expected_hex": "000f7008000f7008",
-      "replacement_hex": "000cc006000cc006",
-      "length": 8
     }
   ]
 }
