@@ -89,7 +89,7 @@ STR_DF_IP_VA           = 0x5433ff9c # "A:\DF_IP.BIN" -> "C:\DF_IP.BIN"
 STR_DF_ID_S_VA         = 0x5433ffac # "A:\DF_ID_S.BIN" -> "C:\DF_ID_S.BIN"
 
 # Hardware & Service Pointers in v1.20
-AHIP_DRV_BASE_VA       = 0x550813d0 # Active Ahip frame driver base (shifted +0x1080 from v1.11)
+AHIP_DRV_BASE_VA       = 0x55081350 # Active Ahip frame driver base in v1.20 (0x5311a632: movw r7, #0x1350; movt r7, #0x5508)
 TRACK_OBJ_PTR_VA       = 0x550b8650 # Singleton pointer
 
 # Hook Sites in v1.20
@@ -328,25 +328,26 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     mark_label("dsp_is_running")
 
     # 6. Extract Completed Live View Planar YUV420 Frame from Ahip Ring Buffer:
-    #    Primary in v1.20: ring_entry = *(*(0x550813d0 + 0x434)) dequeued by AhipService::WaitFrame
-    #    Fallback 1:       ring_entry = *(*(0x550813d0 + 0x424))
-    #    Fallback 2:       DMA node *(0x550813d0 + 0x1c) / *(0x550813d0 + 0x14)
+    #    Official v1.20 AhipService::WaitFrame (0x5311a628):
+    #    ring_entry = *(*(0x55081350 + 0x424)) (Y @ +0x04, U @ +0x08, V @ +0x0c)
+    #    Fallback 1:       ring_entry = *(*(0x55081350 + 0x434))
+    #    Fallback 2:       DMA node *(0x55081350 + 0x1c) / *(0x55081350 + 0x14)
     emit_ldr_imm32(insns, 3, AHIP_DRV_BASE_VA)
     insns.append(0xe593900c) # ldr  sb, [r3, #0x0c] (Ahip YUV slot byte size)
-    insns.append(0xe5932434) # ldr  r2, [r3, #0x434] (primary completed ring entry in v1.20)
+    insns.append(0xe5932424) # ldr  r2, [r3, #0x424] (primary completed ring entry in v1.20)
     insns.append(0xe3520000) # cmp  r2, #0
     insns.append(0x15922000) # ldrne r2, [r2, #0]
     insns.append(0xe3520000) # cmp  r2, #0
-    branch_to("try_ahip_424", is_bl=False, cond=0x0) # beq .try_ahip_424
+    branch_to("try_ahip_434", is_bl=False, cond=0x0) # beq .try_ahip_434
     insns.append(0xe5926004) # ldr  r6, [r2, #0x04] (Y_plane)
     insns.append(0xe3560000) # cmp  r6, #0
-    branch_to("try_ahip_424", is_bl=False, cond=0x0) # beq .try_ahip_424
+    branch_to("try_ahip_434", is_bl=False, cond=0x0) # beq .try_ahip_434
     insns.append(0xe5927008) # ldr  r7, [r2, #0x08] (U_plane)
     insns.append(0xe592800c) # ldr  r8, [r2, #0x0c] (V_plane)
     branch_to("have_yuv_ptrs", is_bl=False, cond=0xe) # b .have_yuv_ptrs
 
-    mark_label("try_ahip_424")
-    insns.append(0xe5932424) # ldr  r2, [r3, #0x424] (fallback ring entry)
+    mark_label("try_ahip_434")
+    insns.append(0xe5932434) # ldr  r2, [r3, #0x434] (fallback ring entry)
     insns.append(0xe3520000) # cmp  r2, #0
     insns.append(0x15922000) # ldrne r2, [r2, #0]
     insns.append(0xe3520000) # cmp  r2, #0

@@ -36,8 +36,8 @@ Version **v1.2.0** represents a major architectural milestone: rebasing the enti
    - v1.2.0 patches both call arguments to pass `sub r1, fp, #0x40` AND patches the ROM drive letters from `'A'` to `'C'`, ensuring 100% reliable SD card mounting.
 
 5. **v1.20 AHIP Ring Buffer Descriptors & Cache Invalidation**:
-   - AHIP driver base shifted to `0x550813d0` in v1.20.
-   - Primary completed frame ring descriptor located at `[r3, #0x434]`, with automatic fallback to `[r3, #0x424]` and legacy nodes (`0x1c` / `0x14`).
+   - AHIP driver base shifted to `0x55081350` in v1.20 (disassembled directly from `AhipService::WaitFrame` @ `0x5311a628`).
+   - Primary completed frame ring descriptor located at `[r3, #0x424]` (`0x55081774`), with automatic fallback to `[r3, #0x434]` and legacy nodes (`0x1c` / `0x14`).
    - Guaranteed ARM D-Cache invalidation (`0x5391801c`) prior to CPU downsampler ingestion.
 
 6. **Pure Full-Time CEVA-CV AI AF**:
@@ -53,8 +53,8 @@ Version **v1.2.0** represents a major architectural milestone: rebasing the enti
 
 | File | Size (Bytes) | SHA-256 | Description |
 | :--- | :--- | :--- | :--- |
-| **`output/fwdc248b.bin`** | 39,109,096 | `a7d820661bd001cdd029352b45e466780c519140dd997151d0004c08711b8fe3` | Active Flashable v1.2.0 Firmware |
-| **`output/fwdc248b_stage3_ai_track.bin`** | 39,109,096 | `a7d820661bd001cdd029352b45e466780c519140dd997151d0004c08711b8fe3` | Preserved Stage 3 Firmware Release |
+| **`output/fwdc248b.bin`** | 39,109,096 | `a9483acbb6c30e38765988144fa4544e85e9b193b6cc468ddd84bc129ec25cda` | Active Flashable v1.2.0 Firmware |
+| **`output/fwdc248b_stage3_ai_track.bin`** | 39,109,096 | `a9483acbb6c30e38765988144fa4544e85e9b193b6cc468ddd84bc129ec25cda` | Preserved Stage 3 Firmware Release |
 | **`output/fwdc248b_stage2_dsp_wake.bin`** | 38,693,256 | `ed8c4e2414ffd66e270bb308a3d3c932a4de8300e57e6cc0fb1fc8f0fffd836e` | Preserved Stage 2 Firmware (Untouched) |
 | **`output/sd_card/DF_EX.BIN`** | 5,251,648 | `b16788a16a11ecc2c007d26888a56195b2b4e1bec8aa05b74ea6789803ae8d44` | CEVA-CV DSP Core + Full K-3 III CNN Weights |
 | **`output/sd_card/DF_ID_S.BIN`** | 65,536 | `3d3ebf29622323bb4a203347feaf676aeac110a7b1181604270a1ae0c22b0a2a` | DSP Instruction DRAM Overlay |
