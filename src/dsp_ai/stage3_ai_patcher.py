@@ -41,20 +41,21 @@ RTOS_PAYLOAD_START     = 0x00017D28
 
 # Cave & Memory Layout in v1.20 ROM
 CAVE1_VA               = 0x53000d60 # Boot-time DSP awakening cave (84 B)
-CAVE2_VA               = 0x53000e00 # Continuous LiveView AI AF cave (1516 B)
+CAVE2_VA               = 0x53000e00 # Hybrid Continuous LiveView AI AF cave (<= 1600 B)
 CAVE_VA                = CAVE2_VA   # Backward compatibility alias
 DESC_TABLE_VA          = 0x53001440 # 728 B table placed after code cave (ends @ 0x53001718)
 MEAN_TABLE_VA          = 0x54212890 # 9,408 B table inside 13,167 byte ROM zero cave
 STD_TABLE_VA           = 0x5424e9d0 # 9,408 B table inside 16,061 byte ROM zero cave
 
-# Non-Overlapping DSP Shared DRAM Layout (0x52940000 .. 0x52a90000)
-# Safely relocated to 0x52930000..0x53000000 unallocated DDR (outside any RTOS heap!)
-TENSOR_IN_VA           = 0x52940000 # work_buf (0xbde40 B): 3-plane 56x56 (stride 64) RGB input @ +0x0000, +0x0e00, +0x1c00
-TENSOR_OUT_VA          = 0x52949a00 # work_buf + 0x9a00: 3-channel 56x56 (stride 64) int16_t segmentation output
+# Non-Overlapping DSP Shared DRAM Layout (0x52930000 .. 0x52d00000)
+# Safely relocated to 0x52b00000+ unallocated DDR (outside any RTOS heap or weights!)
 MEAN_WEIGHTS_VA        = 0x52960000 # Full K-3 III 0x53932548..0x539d7d08 block (677,824 B) loaded by DF_EX.BIN Chunk 1
 HEAD_WEIGHTS_VA        = 0x52a057c0 # Full K-3 III 0x539d7d08..0x53a48768 block (461,408 B) loaded by DF_EX.BIN Chunk 1
-TENSOR_MSG_VA          = 0x52a80000 # 40-byte (0x28 B) DspCommandParameter buffer (outside work_buf!)
-STATUS_VA              = 0x52a80100 # Telemetry & one-shot wakeup guard in DSP shared DRAM (outside work_buf!)
+# Chunk 2 ends at 0x52a76220. All runtime buffers placed safely at 0x52b00000+ (>565 KB above Chunk 2!):
+TENSOR_IN_VA           = 0x52b00000 # work_buf (0xbde40 B): 3-plane 56x56 (stride 64) RGB input @ +0x0000, +0x0e00, +0x1c00
+TENSOR_OUT_VA          = 0x52b09a00 # work_buf + 0x9a00: 3-channel 56x56 (stride 64) int16_t segmentation output
+TENSOR_MSG_VA          = 0x52c00000 # 40-byte (0x28 B) DspCommandParameter buffer (outside work_buf!)
+STATUS_VA              = 0x52c00100 # Telemetry & one-shot wakeup guard in DSP shared DRAM (outside work_buf!)
 
 # Firmware Services & Entry Points in v1.20
 GET_DSP_SVC_VA         = 0x5398d97c # DspFactory::GetDspService() -> singleton struct @ 0x553a3160
@@ -98,7 +99,7 @@ HOOK1_RESUME_VA        = 0x53676ad4 # Resume at original code after prologue
 HOOK1_SINGLETON_VA     = 0x550b8650 # Singleton struct pointer checked by Hook 1
 
 HOOK2_SITE_VA          = 0x5389639c # FaceDetectionService::Task per-frame detect site
-HOOK2_FALLBACK_VA      = 0x538963a4 # Resume after stock detect (cmp r0, #0)
+HOOK2_FALLBACK_VA      = 0x53896460 # Stock ConvertResult path when LibAHFD detects face (0x53896460)
 HOOK2_AI_RESUME_VA     = 0x538963ac # Resume after AI detect (mov r0, r6; bl UpdateFaceDetectionResult)
 
 # Memory Pool Table Offsets in Payload (.data)
@@ -216,13 +217,13 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe92d47f0) # push {r4, r5, r6, r7, r8, sb, sl, lr}
     insns.append(0xe24dd008) # sub  sp, sp, #8
 
-    # 2. Default face_count = 0 in FdLibraryService ([r4, #0x38]) upfront!
-    #    Stock LibAHFD (0x53866594) is NEVER called, so 100% of
-    #    detected boxes on LCD are mathematically guaranteed to come from CEVA-CV CNN.
-    insns.append(0xe5943038) # ldr  r3, [r4, #0x38] (FdLibraryService*)
-    insns.append(0xe3530000) # cmp  r3, #0
-    insns.append(0x13a02000) # movne r2, #0
-    insns.append(0x15832030) # strne r2, [r3, #0x30] (face_count = 0)
+    # 2. Execute stock LibAHFD face detection first!
+    #    r4 is FaceDetectionService*, [r4, #0x38] is FdLibraryService*
+    insns.append(0xe5940038) # ldr  r0, [r4, #0x38] (FdLibraryService*)
+    curr_pc = cave_va + len(insns) * 4
+    insns.append(encode_arm_branch(curr_pc, FD_LIB_DETECT_VA, is_bl=True)) # bl 0x53866594
+    insns.append(0xe3500000) # cmp  r0, #0
+    branch_to("stock_face_found", is_bl=False, cond=0x0) # beq .stock_face_found (0 == SUCCESS)
 
     # 3. Call DspFactory::GetDspService() -> r0
     curr_pc = cave_va + len(insns) * 4
@@ -464,12 +465,10 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     branch_to("sub_find_peak", is_bl=True, cond=0xe) # returns r0: max_diff, r1: col, r2: row, r3: area_cnt
 
     # 16. Noise-immune detection gate:
-    #     Require max_diff >= 2 (+0.5 logit) AND (area_cnt >= 2 || max_diff >= 4)
-    insns.append(0xe3500002) # cmp  r0, #2
+    #     Require max_diff >= 3 (+0.75 logit) AND area_cnt >= 2
+    insns.append(0xe3500003) # cmp  r0, #3
     branch_to("ai_done", is_bl=False, cond=0xb) # blt .ai_done
     insns.append(0xe3530002) # cmp  r3, #2
-    branch_to("subject_detected", is_bl=False, cond=0xa) # bge .subject_detected
-    insns.append(0xe3500004) # cmp  r0, #4
     branch_to("ai_done", is_bl=False, cond=0xb) # blt .ai_done
 
     mark_label("subject_detected")
@@ -510,7 +509,7 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe05c60a5) # subs r6, ip, r5, lsr #1
     insns.append(0x43a06000) # movmi r6, #0 (top)
 
-    # Save telemetry @ STATUS_VA + 12 (0x52a8010c)
+    # Save telemetry @ STATUS_VA + 12 (0x52c0010c)
     emit_ldr_imm32(insns, 3, STATUS_VA + 12)
     insns.append(0xe5839000) # str  sb, [r3, #0]  (peak_score)
     insns.append(0xe5838004) # str  r8, [r3, #4]  (last_x Q8)
@@ -539,16 +538,32 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe58a5008) # str  r5, [sl, #0x08] (face.width)
     insns.append(0xe58a500c) # str  r5, [sl, #0x0c] (face.height)
 
-    # +0x20..+0x2c: eye1_rect centered at (cx, cy), size 0x0c00 x 0x0c00
-    insns.append(0xe2571c06) # subs r1, r7, #0x0600
-    insns.append(0x43a01000) # movmi r1, #0 (eye1.left)
-    insns.append(0xe25c2c06) # subs r2, ip, #0x0600
-    insns.append(0x43a02000) # movmi r2, #0 (eye1.top)
-    insns.append(0xe3a03b03) # mov  r3, #0x0c00 (eye1.width/height = 3072)
-    insns.append(0xe58a1020) # str  r1, [sl, #0x20] (eye1.left)
-    insns.append(0xe58a2024) # str  r2, [sl, #0x24] (eye1.top)
-    insns.append(0xe58a3028) # str  r3, [sl, #0x28] (eye1.width)
-    insns.append(0xe58a302c) # str  r3, [sl, #0x2c] (eye1.height)
+    # +0x10..+0x2c: Dynamic eye target boxes within face bounds
+    # eye_w = box_size >> 2 (e.g. 0x0a00 = 10 px)
+    # eye_off = box_size >> 3 (e.g. 0x0500 = 5 px)
+    insns.append(0xe1a03125) # lsr  r3, r5, #2 (eye_w = box_size >> 2)
+    insns.append(0xe1a021a5) # lsr  r2, r5, #3 (eye_off = box_size >> 3)
+
+    # eye1 (right eye in image / camera left): cx - eye_off, cy - eye_off
+    insns.append(0xe0470002) # sub  r0, r7, r2 (eye1_cx = cx - eye_off)
+    insns.append(0xe05000a3) # subs r0, r0, r3, lsr #1 (eye1.left)
+    insns.append(0x43a00000) # movmi r0, #0
+    insns.append(0xe04c1002) # sub  r1, ip, r2 (eye1_cy = cy - eye_off)
+    insns.append(0xe05110a3) # subs r1, r1, r3, lsr #1 (eye1.top)
+    insns.append(0x43a01000) # movmi r1, #0
+    insns.append(0xe58a0010) # str  r0, [sl, #0x10] (eye1.left)
+    insns.append(0xe58a1014) # str  r1, [sl, #0x14] (eye1.top)
+    insns.append(0xe58a3018) # str  r3, [sl, #0x18] (eye1.width)
+    insns.append(0xe58a301c) # str  r3, [sl, #0x1c] (eye1.height)
+
+    # eye2 (left eye in image / camera right): cx + eye_off, cy - eye_off
+    insns.append(0xe0870002) # add  r0, r7, r2 (eye2_cx = cx + eye_off)
+    insns.append(0xe05000a3) # subs r0, r0, r3, lsr #1 (eye2.left)
+    insns.append(0x43a00000) # movmi r0, #0
+    insns.append(0xe58a0020) # str  r0, [sl, #0x20] (eye2.left)
+    insns.append(0xe58a1024) # str  r1, [sl, #0x24] (eye2.top)
+    insns.append(0xe58a3028) # str  r3, [sl, #0x28] (eye2.width)
+    insns.append(0xe58a302c) # str  r3, [sl, #0x2c] (eye2.height)
 
     # +0x4c: confidence score, +0x50: face_id
     # Complete SelectMainFace & EVENT 0x04070001 State Seeding:
@@ -570,6 +585,7 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe584111c) # str  r1, [r4, #0x11c] (seed primary tracked face_id)
     insns.append(0xe3a02001) # mov  r2, #1
     insns.append(0xe5c4213c) # strb r2, [r4, #0x13c] (mark tracking active = 1)
+    insns.append(0xe3a00000) # mov  r0, #0
     insns.append(0xe5c40121) # strb r0, [r4, #0x121] (clear is_stabilizing = 0)
     insns.append(0xe2843f49) # add  r3, r4, #0x124
     insns.append(0xe1c300b0) # strh r0, [r3]         (lost_frames_counter = 0)
@@ -591,6 +607,15 @@ def build_cave2_payload(cave_va: int = CAVE2_VA) -> bytes:
     insns.append(0xe8bd000f) # pop  {r0, r1, r2, r3}
     curr_pc = cave_va + len(insns) * 4
     insns.append(encode_arm_branch(curr_pc, HOOK2_AI_RESUME_VA, is_bl=False))
+
+    mark_label("stock_face_found")
+    # Stock LibAHFD detected face(s)!
+    # Restore stack and branch to stock ConvertResult path at HOOK2_FALLBACK_VA (0x53896460)
+    insns.append(0xe28dd008) # add  sp, sp, #8
+    insns.append(0xe8bd47f0) # pop  {r4, r5, r6, r7, r8, sb, sl, lr}
+    insns.append(0xe8bd000f) # pop  {r0, r1, r2, r3}
+    curr_pc = cave_va + len(insns) * 4
+    insns.append(encode_arm_branch(curr_pc, HOOK2_FALLBACK_VA, is_bl=False))
 
     # ---------------------------------------------------------------------
     # Subroutine: Aspect-Ratio-Aware Downsampler + 2.0x Backlit Shadow Recovery
