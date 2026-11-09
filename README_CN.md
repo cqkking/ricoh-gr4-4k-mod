@@ -4,9 +4,9 @@
 
 [![平台: Socionext Milbeaut M10V](https://img.shields.io/badge/平台-Socionext%20Milbeaut%20M10V-007acc.svg)](#)
 [![适配固件: Ricoh GR IV v1.20](https://img.shields.io/badge/目标固件-v1.20%20fwdc248b.bin-green.svg)](#)
-[![版本: v1.2.0](https://img.shields.io/badge/版本-v1.2.0-blue.svg)](#)
+[![版本: v1.2.1](https://img.shields.io/badge/版本-v1.2.1-blue.svg)](#)
 [![架构: ARM Cortex-A7 + CEVA-CV DSP](https://img.shields.io/badge/芯片架构-ARMv7%20%2B%20CEVA--CV%20DSP-orange.svg)](#)
-[![状态: 纯 CEVA-CV CNN 校验通过](https://img.shields.io/badge/验证状态-纯%20CEVA--CV%20CNN%20(双重累加和%3D0)-brightgreen.svg)](#)
+[![状态: 混合 AF 与零冲突内存校验通过](https://img.shields.io/badge/验证状态-混合%20AF%20%26%20零冲突内存校验通过%20(双重累加和%3D0)-brightgreen.svg)](#)
 [![开源协议: MIT](https://img.shields.io/badge/协议-MIT-blue.svg)](#)
 
 本项目是针对 **理光 GR IV (GR4)** 数码相机的非官方底层固件扩展补丁。它通过破译芯片内存映射与二进制驱动协议，成功激活了片上完全闲置的 **CEVA-CV 矢量 AI DSP 硬件协处理器**（物理基地址 `0x41000000`），并将**宾得旗舰单反 Pentax K-3 Mark III 的深度学习人体/主体识别卷积神经网络**无缝移植挂接进理光 GR4 原生的 165 点片上相位差检测自动对焦（PDAF）系统。

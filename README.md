@@ -4,9 +4,9 @@
 
 [![Platform: Socionext Milbeaut M10V](https://img.shields.io/badge/Platform-Socionext%20Milbeaut%20M10V-007acc.svg)](#)
 [![Target: Ricoh GR IV v1.20](https://img.shields.io/badge/Target%20Firmware-v1.20%20fwdc248b.bin-green.svg)](#)
-[![Version: v1.2.0](https://img.shields.io/badge/Version-v1.2.0-blue.svg)](#)
+[![Version: v1.2.1](https://img.shields.io/badge/Version-v1.2.1-blue.svg)](#)
 [![Architecture: ARM Cortex-A7 + CEVA-CV DSP](https://img.shields.io/badge/Architecture-ARMv7%20%2B%20CEVA--CV%20DSP-orange.svg)](#)
-[![Status: Pure CEVA-CV CNN Verified](https://img.shields.io/badge/Status-Pure%20CEVA--CV%20CNN%20(Dual%20WordSum%3D0)-brightgreen.svg)](#)
+[![Status: Hybrid AF & Zero-Collision Verified](https://img.shields.io/badge/Status-Hybrid%20AF%20%26%20Zero--Collision%20Verified%20(Dual%20WordSum%3D0)-brightgreen.svg)](#)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](#)
 
 Unofficial firmware modification for the **Ricoh GR IV (GR4)** digital camera that unlocks the dormant on-die **CEVA-CV vector AI DSP co-processor** (`0x41000000`) and ports **Pentax K-3 Mark III's deep learning subject recognition neural network** directly into Ricoh's native 165-point on-sensor Phase Detection Autofocus (PDAF) system.
