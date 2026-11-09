@@ -1,30 +1,41 @@
 #!/usr/bin/env python3
 """
-verify_k3_4k_v120_patch.py - Automated verification suite for Ricoh GR IV v1.20 3K UHD Video Mod
+verify_k3_4k_v120_patch.py - Automated verification suite for Ricoh GR IV v1.20 3K UHD Video Mod (v1.5.0 Decoupled Pipeline)
 
 Validates:
 1. Outer container and inner payload dual word_sum == 0x00000000.
 2. Complete LZSS round-trip container integrity.
-3. LiveViewDebug::IsDebug4KMovie (0x538ad500) == mov r0, #1; bx lr.
-4. LiveView Defect A (24p/30p 4K buffer & boolean flag) @ 0x53652e70..0x53652e9c.
-5. LiveView Defect B (m_is4KLiveView struct offset +0x564) @ 0x5365c7c8.
-6. LiveView Defect C (LiveViewSequencePlanner Plan 4/5 -> Plan 3) @ 0x5366e180.
-7. Full FOV Alignment (Sensor Modes 5/6 -> CIS Mode 3 full APS-C width) @ 0x536717ec.
-8. Movie SR Symmetrical Active Width bug fix (subne r4, r8, r6, lsl #1) @ 0x5365aae4.
-9. Movie SR Restored: Call site (0x5365ab34) and entry (0x538b7b3c) preserved for menu toggle.
-10. 3K UHD Resolution Getters:
-    - WidthGetter1 @ 0x538997e0 == moveq r0, #0xc00 (3072)
-    - WidthGetter2 @ 0x53899820 == moveq r0, #0xc00 (3072)
-    - HeightGetter 16:9 @ 0x5389986c == moveq r0, #0x6c0 (1728)
-    - HeightGetter default @ 0x53899890 == moveq r0, #0x6c0 (1728)
-    - CodecWidthGetter @ 0x53898f7c == moveq r0, #0xc00 (3072)
-    - CodecParamInit @ 0x538995a0 == mov r2, #0xc00 (3072)
-11. 3K UHD Static Resolution Tables:
-    - 32-bit descriptor table @ 0x53de99a8 == (3072, 1728)
-    - 16-bit descriptor table @ 0x53fd8bd8 == (3072, 1728)
-    - 16-bit display resolution table 1 @ 0x54079510 == (3072, 1728 x2)
-    - 16-bit ScreenLcdParameter table 2 @ 0x54079588 == (3072, 1728 x2)
-12. Critical stock invariants.
+3. LiveView 100% Stock Untouched:
+   - LiveViewDebug::IsDebug4KMovie (0x538ad500) == mov r0, #0; bx lr.
+   - SetMovieResolution (0x538b376c) matches stock byte-for-byte.
+   - LiveViewSequencePlanner Plan 0..2 jump table entries match stock.
+4. Movie SR Symmetrical Active Width bug fix (subne r4, r8, r6, lsl #1) @ 0x5365aae4.
+5. Decoupled Movie Setup:
+   - LiveViewMovieSetup width override @ 0x5365a718 == mov r0, #0xc00 (3072 px).
+   - LiveViewMovieSetup height override @ 0x5365a724 == mov r0, #0x6c0 (1728 px).
+   - LiveViewMovieSetup jump table entry 2 @ 0x5365a7f4 -> 0x5365a878 (res_enum = 0).
+   - Resolution tables 0x54008528 and 0x54008578 entry 0 == (3072, 1728).
+6. Dedicated High-Resolution Channel (movie_size = 3):
+   - WidthGetter1 slot 3 @ 0x538997e0 == moveq r0, #0xc00 (3072).
+   - WidthGetter2 slot 3 @ 0x53899820 == moveq r0, #0xc00 (3072).
+   - HeightGetter 16:9 slot 3 @ 0x5389986c == moveq r0, #0x6c0 (1728).
+   - HeightGetter default slot 3 @ 0x53899890 == moveq r0, #0x6c0 (1728).
+   - FrameYuvSizeGetter slot 3 @ 0x538998e8 == 0x00798000 (7,962,624 bytes).
+   - CodecWidthGetter slot 3 @ 0x53898f7c == moveq r0, #0xc00 (3072).
+   - CodecParamInit slot 3 width @ 0x538995a0 == mov r2, #0xc00 (3072).
+   - SPS level_idc 1 & 2 @ 0x538991f4 & 0x5389942c == Level 5.2 (0x34).
+7. Socionext Milbeaut Hardware VPU 3K UHD Encoding:
+   - VPU jump table entry 0x0d @ 0x530fb404 -> 0x530fbea4 (custom MBs 192x108).
+   - VPU ResTable entry 0x0d macroblock alloc @ 0x530f0794 == mov r3, #0x5100 (20,736 MBs).
+8. Playback H.264 Resolution Checks:
+   - PlaybackH264 check 1 @ 0x536e7c14 == cmp r0, #0xc00; cmpeq r1, #0x6c0.
+   - PlaybackH264 check 2 @ 0x536e7cb4 == cmp r0, #0xc00; cmpeq r1, #0x6c0.
+9. Static Tables (3072 x 1728):
+   - 32-bit descriptor table @ 0x53de99a8 == (3072, 1728).
+   - 16-bit descriptor table @ 0x53fd8bd8 == (3072, 1728).
+   - 16-bit display resolution table 1 @ 0x54079510 == (3072, 1728 x2).
+   - 16-bit ScreenLcdParameter table 2 @ 0x54079588 == (3072, 1728 x2).
+10. Preservation of stock FHD slot 0 getters (backward compatibility).
 """
 
 import struct
@@ -60,7 +71,7 @@ def verify_firmware_container(fw_path: Path, label: str) -> bytes:
 
 
 def run_tests() -> None:
-    print("=== Ricoh GR IV v1.20 3K UHD (3072x1728) Video Mod Verification Suite ===\n")
+    print("=== Ricoh GR IV v1.20 3K UHD (3072x1728) Video Mod Verification Suite (v1.5.0) ===\n")
     official_raw = OFFICIAL_FW_V120.read_bytes()
     official_payload, _, _ = decode_container(official_raw)
 
@@ -70,96 +81,119 @@ def run_tests() -> None:
     print("[*] Validating Patched Firmware Binary:")
     patched_payload = verify_firmware_container(FW_V120_4K, "v1.20 3K UHD H.264")
 
-    # 1. Gate Unlock
-    insns = list(md.disasm(patched_payload[v2p(0x538AD500) : v2p(0x538AD500) + 8], 0x538AD500))
-    assert len(insns) == 2
-    assert insns[0].mnemonic == "mov" and insns[0].op_str == "r0, #1"
-    assert insns[1].mnemonic == "bx" and insns[1].op_str == "lr"
-    print("  [PASS] Gate Unlock: LiveViewDebug::IsDebug4KMovie (0x538ad500) -> mov r0, #1; bx lr")
+    # 1. LiveView Stock Untouched Invariants
+    insns_dbg = list(md.disasm(patched_payload[v2p(0x538AD500) : v2p(0x538AD500) + 8], 0x538AD500))
+    assert len(insns_dbg) == 2
+    assert insns_dbg[0].mnemonic == "mov" and insns_dbg[0].op_str == "r0, #0"
+    assert insns_dbg[1].mnemonic == "bx" and insns_dbg[1].op_str == "lr"
+    print("  [PASS] LiveView Stock: IsDebug4KMovie (0x538ad500) == mov r0, #0; bx lr (100% stock)")
 
-    # 2. LiveView Defect A
-    i_cmp = next(md.disasm(patched_payload[v2p(0x53652E70) : v2p(0x53652E74)], 0x53652E70))
-    i_beq = next(md.disasm(patched_payload[v2p(0x53652E78) : v2p(0x53652E7C)], 0x53652E78))
-    i_mov = next(md.disasm(patched_payload[v2p(0x53652E9C) : v2p(0x53652EA0)], 0x53652E9C))
-    assert i_cmp.mnemonic == "cmp" and i_cmp.op_str == "r0, #0"
-    assert i_beq.mnemonic == "beq" and "0x53652de4" in i_beq.op_str
-    assert i_mov.mnemonic == "mov" and i_mov.op_str == "r3, #1"
-    print("  [PASS] Defect A: 24p/30p LiveView Buffer & is4K=1 Flag Route")
+    poff_res = v2p(0x538B376C)
+    assert patched_payload[poff_res : poff_res + 32] == official_payload[poff_res : poff_res + 32]
+    print("  [PASS] LiveView Stock: SetMovieResolution (0x538b376c) matches stock (offset +9 == 2)")
 
-    # 3. LiveView Defect B
-    i_ldrb = next(md.disasm(patched_payload[v2p(0x5365C7C8) : v2p(0x5365C7CC)], 0x5365C7C8))
-    assert i_ldrb.mnemonic == "ldrb" and "#0x564" in i_ldrb.op_str
-    print("  [PASS] Defect B: m_is4KLiveView struct offset aligned to [r3, #0x564]")
+    poff_seq = v2p(0x5366E170)
+    assert patched_payload[poff_seq : poff_seq + 12] == official_payload[poff_seq : poff_seq + 12]
+    print("  [PASS] LiveView Stock: LiveViewSequencePlanner Plan 0..2 jump table untouched")
 
-    # 4. LiveView Defect C
-    p4, p5 = struct.unpack("<2I", patched_payload[v2p(0x5366E180) : v2p(0x5366E188)])
-    assert p4 == 0x5366E238 and p5 == 0x5366E238, f"Plan 4/5 mismatch: {p4:#x}, {p5:#x}"
-    print("  [PASS] Defect C: LiveViewSequencePlanner Plan 4 & 5 -> Plan 3 (0x5366e238)")
-
-    # 5. Full FOV Alignment
-    t5, t6 = struct.unpack("<2I", patched_payload[v2p(0x536717EC) : v2p(0x536717F4)])
-    assert t5 == 0x53671A68 and t6 == 0x53671A68, f"Modes 5/6 jump table mismatch: {t5:#x}, {t6:#x}"
-    print("  [PASS] Full FOV Alignment: Sensor Modes 5 & 6 -> CIS Mode 3 (0x53671a68, Full APS-C width, 0 crop)")
-
-    # 6. Symmetrical Active Width bug fix (Movie SR panning stripe elimination)
+    # 2. Movie SR Symmetrical Active Width bug fix
     i_w = next(md.disasm(patched_payload[v2p(0x5365AAE4) : v2p(0x5365AAE8)], 0x5365AAE4))
     assert i_w.mnemonic == "subne" and i_w.op_str == "r4, r8, r6, lsl #1"
-    print("  [PASS] Movie SR Active Width: subne r4, r8, r6, lsl #1 (symmetrical Width - MarginX * 2, zero panning stripes)")
+    print("  [PASS] Movie SR Active Width: subne r4, r8, r6, lsl #1 (symmetrical Width - MarginX * 2)")
 
-    # 7. Movie SR Restored & Functional
-    i_sr_call = next(md.disasm(patched_payload[v2p(0x5365AB34) : v2p(0x5365AB38)], 0x5365AB34))
-    assert i_sr_call.mnemonic == "b" and "0x538b7b3c" in i_sr_call.op_str
-    i_sr_func = next(md.disasm(patched_payload[v2p(0x538B7B3C) : v2p(0x538B7B40)], 0x538B7B3C))
-    assert i_sr_func.mnemonic == "mov" and i_sr_func.op_str == "ip, sp"
-    print("  [PASS] Movie SR Restored: SetupMovieShakeReduction call site & function entry functional")
+    # 3. Decoupled Movie Recording at LiveViewMovieSetup
+    iw_setup = next(md.disasm(patched_payload[v2p(0x5365A718) : v2p(0x5365A71C)], 0x5365A718))
+    ih_setup = next(md.disasm(patched_payload[v2p(0x5365A724) : v2p(0x5365A728)], 0x5365A724))
+    assert iw_setup.mnemonic == "mov" and iw_setup.op_str in ("r0, #0xc00", "r0, #12, #24")
+    assert ih_setup.mnemonic == "mov" and ih_setup.op_str in ("r0, #0x6c0", "r0, #108, #28")
+    print("  [PASS] LiveViewMovieSetup Decouple: 0x5365a718 -> mov r0, #0xc00 (3072) & 0x5365a724 -> mov r0, #0x6c0 (1728)")
 
-    # 8. 3K Resolution Getters
-    # WidthGetter1
+    jt_entry2 = struct.unpack("<I", patched_payload[v2p(0x5365A7F4) : v2p(0x5365A7F8)])[0]
+    assert jt_entry2 == 0x5365A878, f"Jump table entry 2 mismatch: {jt_entry2:#x} != 0x5365a878"
+    print("  [PASS] LiveViewMovieSetup Jump Table: entry 2 -> 0x5365a878 (res_enum = 0)")
+
+    tw0 = struct.unpack("<H", patched_payload[v2p(0x54008528) : v2p(0x5400852A)])[0]
+    th0 = struct.unpack("<H", patched_payload[v2p(0x54008578) : v2p(0x5400857A)])[0]
+    assert (tw0, th0) == (3072, 1728), f"Table entry 0 mismatch: ({tw0}, {th0})"
+    print("  [PASS] Static Tables 0x54008528 & 0x54008578: entry 0 == (3072, 1728)")
+
+    # 4. Dedicated High-Resolution Channel (movie_size = 3) Getters
     iw1 = next(md.disasm(patched_payload[v2p(0x538997E0) : v2p(0x538997E4)], 0x538997E0))
-    assert iw1.mnemonic == "moveq" and (iw1.op_str == "r0, #0xc00" or iw1.op_str == "r0, #12, #24")
-    # WidthGetter2
     iw2 = next(md.disasm(patched_payload[v2p(0x53899820) : v2p(0x53899824)], 0x53899820))
-    assert iw2.mnemonic == "moveq" and (iw2.op_str == "r0, #0xc00" or iw2.op_str == "r0, #12, #24")
-    # HeightGetter 16:9
     ih1 = next(md.disasm(patched_payload[v2p(0x5389986C) : v2p(0x53899870)], 0x5389986C))
-    assert ih1.mnemonic == "moveq" and (ih1.op_str == "r0, #0x6c0" or ih1.op_str == "r0, #108, #28")
-    # HeightGetter default
     ih2 = next(md.disasm(patched_payload[v2p(0x53899890) : v2p(0x53899894)], 0x53899890))
-    assert ih2.mnemonic == "moveq" and (ih2.op_str == "r0, #0x6c0" or ih2.op_str == "r0, #108, #28")
-    # CodecWidthGetter
-    icw = next(md.disasm(patched_payload[v2p(0x53898F7C) : v2p(0x53898F80)], 0x53898F7C))
-    assert icw.mnemonic == "moveq" and (icw.op_str == "r0, #0xc00" or icw.op_str == "r0, #12, #24")
-    # CodecParamInit
-    icp = next(md.disasm(patched_payload[v2p(0x538995A0) : v2p(0x538995A4)], 0x538995A0))
-    assert icp.mnemonic == "mov" and (icp.op_str == "r2, #0xc00" or icp.op_str == "r2, #12, #24")
-    print("  [PASS] 3K UHD Resolution Getters: 3072x1728 wired across Width/Height/Codec functions")
+    assert iw1.mnemonic == "moveq" and iw1.op_str in ("r0, #0xc00", "r0, #12, #24")
+    assert iw2.mnemonic == "moveq" and iw2.op_str in ("r0, #0xc00", "r0, #12, #24")
+    assert ih1.mnemonic == "moveq" and ih1.op_str in ("r0, #0x6c0", "r0, #108, #28")
+    assert ih2.mnemonic == "moveq" and ih2.op_str in ("r0, #0x6c0", "r0, #108, #28")
+    print("  [PASS] Slot 3 Getters: 3072x1728 configured in WidthGetter1/2 & HeightGetter")
 
-    # 9. 3K Static Tables
+    iyuv1 = next(md.disasm(patched_payload[v2p(0x538998E8) : v2p(0x538998EC)], 0x538998E8))
+    iyuv2 = next(md.disasm(patched_payload[v2p(0x538998EC) : v2p(0x538998F0)], 0x538998EC))
+    assert iyuv1.mnemonic == "mov" and iyuv1.op_str in ("r0, #0x8000", "r0, #2, #18")
+    assert iyuv2.mnemonic == "movt" and iyuv2.op_str == "r0, #0x79"
+    print("  [PASS] FrameYuvSizeGetter: slot 3 returns 0x00798000 (7,962,624 bytes = 3K YUV420)")
+
+    icw = next(md.disasm(patched_payload[v2p(0x53898F7C) : v2p(0x53898F80)], 0x53898F7C))
+    icp = next(md.disasm(patched_payload[v2p(0x538995A0) : v2p(0x538995A4)], 0x538995A0))
+    assert icw.mnemonic == "moveq" and icw.op_str in ("r0, #0xc00", "r0, #12, #24")
+    assert icp.mnemonic == "mov" and icp.op_str in ("r2, #0xc00", "r2, #12, #24")
+    print("  [PASS] Codec Width & Param Init: 3072 px configured")
+
+    isps1 = next(md.disasm(patched_payload[v2p(0x538991F4) : v2p(0x538991F8)], 0x538991F4))
+    isps2 = next(md.disasm(patched_payload[v2p(0x5389942C) : v2p(0x53899430)], 0x5389942C))
+    assert isps1.mnemonic == "mov" and isps1.op_str == "r8, #0x34"
+    assert isps2.mnemonic == "mov" and isps2.op_str == "r0, #0x34"
+    print("  [PASS] SPS level_idc: Level 5.2 (0x34) configured for iOS QuickTime & camera playback")
+
+    # 5. Socionext Milbeaut Hardware VPU Custom Macroblocks
+    vpu_target = struct.unpack("<I", patched_payload[v2p(0x530FB404) : v2p(0x530FB408)])[0]
+    assert vpu_target == 0x530FBEA4, f"VPU jump table mismatch: {vpu_target:#x} != 0x530fbea4"
+    print("  [PASS] VPU Hardware: JumpTable[0x0d] -> 0x530fbea4 (custom MBs 192x108 = 3072x1728)")
+
+    i_vpu_mb = next(md.disasm(patched_payload[v2p(0x530F0794) : v2p(0x530F0798)], 0x530F0794))
+    assert i_vpu_mb.mnemonic == "mov" and i_vpu_mb.op_str in ("r3, #0x5100", "r3, #81, #24")
+    print("  [PASS] VPU ResTable: entry 0x0d allocates 20,736 MBs (0x5100)")
+
+    # 6. Playback H.264 Resolution Checks
+    p_chk1 = list(md.disasm(patched_payload[v2p(0x536E7C14) : v2p(0x536E7C1C)], 0x536E7C14))
+    p_chk2 = list(md.disasm(patched_payload[v2p(0x536E7CB4) : v2p(0x536E7CBC)], 0x536E7CB4))
+    assert len(p_chk1) == 2 and len(p_chk2) == 2
+    assert p_chk1[0].mnemonic == "cmp" and p_chk1[0].op_str in ("r0, #0xc00", "r0, #12, #24")
+    assert p_chk1[1].mnemonic == "cmpeq" and p_chk1[1].op_str in ("r1, #0x6c0", "r1, #108, #28")
+    assert p_chk2[0].mnemonic == "cmp" and p_chk2[0].op_str in ("r0, #0xc00", "r0, #12, #24")
+    assert p_chk2[1].mnemonic == "cmpeq" and p_chk2[1].op_str in ("r1, #0x6c0", "r1, #108, #28")
+    print("  [PASS] PlaybackH264: 3072x1728 resolution check gates configured")
+
+    # 7. Static Tables
     w32, h32 = struct.unpack("<2I", patched_payload[v2p(0x53DE99A8) : v2p(0x53DE99B0)])
-    assert w32 == 3072 and h32 == 1728, f"32-bit table mismatch: ({w32}, {h32})"
+    assert (w32, h32) == (3072, 1728), f"32-bit table mismatch: ({w32}, {h32})"
     w16, h16 = struct.unpack("<2H", patched_payload[v2p(0x53FD8BD8) : v2p(0x53FD8BDC)])
-    assert w16 == 3072 and h16 == 1728, f"16-bit table mismatch: ({w16}, {h16})"
+    assert (w16, h16) == (3072, 1728), f"16-bit table mismatch: ({w16}, {h16})"
     w_d1a, h_d1a, w_d1b, h_d1b = struct.unpack("<4H", patched_payload[v2p(0x54079510) : v2p(0x54079518)])
     assert (w_d1a, h_d1a, w_d1b, h_d1b) == (3072, 1728, 3072, 1728), f"Display table 1 mismatch: {(w_d1a, h_d1a)}"
     w_d2a, h_d2a, w_d2b, h_d2b = struct.unpack("<4H", patched_payload[v2p(0x54079588) : v2p(0x54079590)])
     assert (w_d2a, h_d2a, w_d2b, h_d2b) == (3072, 1728, 3072, 1728), f"Display table 2 mismatch: {(w_d2a, h_d2a)}"
-    print("  [PASS] 3K UHD Static Tables: 3072x1728 configured in 32-bit, 16-bit, and display tables")
+    print("  [PASS] Static Tables: 3072x1728 configured in 32-bit, 16-bit, and display tables")
 
-    # 10. Check unchanged invariants
-    invariants = [
-        (0x5366E170, 12, "LiveViewSequencePlanner Plan 0..2 jump table entries"),
-        (0x53882194, 8,  "Is4KSensorMode predicate integrity"),
+    # 8. Backward Compatibility: Stock FHD slot 0 getters untouched
+    fhd_invariants = [
+        (0x538997EC, 4, "mov r0, #0x780 (FHD WidthGetter1)"),
+        (0x5389982C, 4, "mov r0, #0x780 (FHD WidthGetter2)"),
+        (0x5389989C, 4, "movw r0, #0x438 (FHD HeightGetter 16:9)"),
+        (0x538998A4, 4, "mov r0, #0x440 (FHD HeightGetter alt)"),
+        (0x53898F88, 4, "mov r0, #0x780 (FHD CodecWidthGetter)"),
     ]
-    for va, nbytes, desc in invariants:
+    for va, nbytes, desc in fhd_invariants:
         poff = v2p(va)
         assert patched_payload[poff : poff + nbytes] == official_payload[poff : poff + nbytes], (
-            f"Invariant violated @ {va:#x}: {desc}"
+            f"FHD stock invariant broken @ {va:#x}: {desc}"
         )
-    print("  [PASS] Stock Invariants untouched")
+    print("  [PASS] Stock FHD Invariants: FHD slot 0 getters 100% untouched")
 
     diffs = diff_offsets(official_payload, patched_payload)
     print(f"\n[SUMMARY] Total modified payload bytes: {len(diffs)} bytes (including rezero checksum word)")
-    print("ALL 3K UHD VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
+    print("ALL v1.5.0 DECOUPLED 3K UHD VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
 
 
 if __name__ == "__main__":
