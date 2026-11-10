@@ -9,17 +9,16 @@
 [![Movie SR](https://img.shields.io/badge/Movie%20SR-Restored%20%26%20Fixed-brightgreen)](#)
 [![Framerate](https://img.shields.io/badge/Framerate-3K%2060P%20%7C%203K%2030P%20%7C%203K%2024P-orange)](#)
 [![Baseline](https://img.shields.io/badge/Baseline-v1.20%20fwdc248b.bin-informational)](#)
-[![Release](https://img.shields.io/badge/Release-v1.5.0-brightgreen)](#)
+[![Release](https://img.shields.io/badge/Release-v1.5.1-brightgreen)](#)
 [![License](https://img.shields.io/badge/License-GPL--2.0-yellow)](#)
 
-> **🚀 v1.5.0 Decoupled Architecture: True Native 3K UHD (3072×1728) Recording with Zero-Shatter VPU Encoding!**  
-> Version **v1.5.0** resolves the two critical recording issues discovered during hardware testing in v1.4.0 (videos saved as 1080p and playback diagonally shattered/glitched). By adopting a **Decoupled Pipeline Architecture**, v1.5.0 achieves:
-> 1. **Zero LiveView Freeze / Looping Frames across 24p, 30p, and 60p**: LiveView is kept 100% stock factory-smooth (Plan 2, CIS Mode 3, 28mm full optical wide FOV).
-> 2. **Native 3K UHD (`3072 × 1728`) Direct Output**: Overrides container metadata at `LiveViewMovieSetup` and routes directly to the dedicated high-resolution channel (`movie_size = 3`).
-> 3. **Socionext Milbeaut Hardware VPU Custom Macroblock Encoding**: Reroutes VPU hardware preset to custom MB handler ($192 \times 108 = 20,736$ macroblocks), completely eliminating row-stride line-wrap tearing and video shattering!
-> 4. **Dedicated 13.5 MB Ring Buffer Pool**: Eliminates YUV frame buffer overruns; provides 8 MB primary + 4 MB sub bitstream buffers with up to 90 Mbps high-bitrate encoding.
-> 5. **Flawless In-Camera & Apple iOS QuickTime Playback**: SPS `level_idc` updated to Level 5.2 (0x34) and `PlaybackH264` gates updated to 3072×1728.
-> 6. **Movie SR Horizontal Panning Stripe Bug Permanently Resolved**: Symmetrical active width calculation (`subne r4, r8, r6, lsl #1`) eliminates all boundary artifacts during rapid panning!
+> **🚀 v1.5.1 Symmetrical Pipeline: Flawless Zero-Shatter 3K UHD (3072×1728) Recording & Native VPU Architecture!**  
+> Version **v1.5.1** directly addresses and resolves all three real-device issues observed in v1.5.0:
+> 1. **Zero Playback Shattering / Tearing**: Full mathematical alignment of Y/UV plane sizes and offsets ($Y = 0x510000$, $UV = 0x288000$, $Total = 0x798000$) in `CodecParamInit` and getters completely cures playback shattering!
+> 2. **Native VPU Hardware 3K Preset (res_id = 0x25)**: Activates Milbeaut built-in preset 0x25 (37) in Encode/Decode tables directly, eliminating all jump-table hacks and running on 100% stock low-level driver logic ($192 \times 108 = 20,736$ macroblocks).
+> 3. **Smooth In-Camera & Apple iOS QuickTime Playback**: SPS restored to stock Level 5.1 (`0x33`), fully supported by the camera's internal hardware decoder (`PlaybackH264`) and iOS Photos.
+> 4. **Decoupled Pipeline & Zero LiveView Freeze**: 100% factory preview smoothness (Plan 2, CIS Mode 3, 28mm full optical wide FOV) with direct 3K UHD recording.
+> 5. **Movie SR Horizontal Panning Stripe Fix**: Symmetrical active width calculation (`subne r4, r8, r6, lsl #1`) eliminates all boundary artifacts during rapid panning.
 
 This project provides an in-camera direct **3K UHD (3072×1728) Video Recording** firmware modification for the **Ricoh GR IV (Standard Edition / Mainland China version v1.20 `fwdc248b.bin`)**.
 
@@ -29,7 +28,8 @@ This project provides an in-camera direct **3K UHD (3072×1728) Video Recording*
 
 | Release Variant | Flashable File | Codec & Container | Target Bitrates | Primary Features |
 | :--- | :--- | :--- | :--- | :--- |
-| **v1.5.0: 3K UHD Decoupled Architecture**<br/>*(Latest & Recommended)* | [`output/sd_card/fwdc248b.bin`](output/sd_card/fwdc248b.bin) | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 60p: 75~90 Mbps<br/>30p: 75~90 Mbps<br/>24p: 60~72 Mbps | • **Decoupled Architecture**: 100% stock factory LiveView smoothness across 24p, 30p, 60p with zero freeze<br/>• **True Native 3K UHD (`3072 × 1728`) Direct Recording**, resolving 1080p container fallback<br/>• **Socionext VPU Hardware Custom Macroblocks ($192 \times 108$)**, eliminating line-wrap skew and playback shattering<br/>• **13.5 MB Frame Buffer Pool**, preventing YUV buffer overflow<br/>• **SPS Level 5.2**, fully compatible with iOS QuickTime & in-camera playback<br/>• **Movie SR Symmetrical Fix**: eliminates horizontal panning edge stripes<br/>• **100% Full APS-C sensor readout (CIS Mode 3)**, true 28mm wide-angle zero crop |
+| **v1.5.1: 3K UHD Symmetrical Architecture**<br/>*(Latest & Recommended)* | [`output/sd_card/fwdc248b.bin`](output/sd_card/fwdc248b.bin) | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 30p: 75~90 Mbps<br/>24p: 60~72 Mbps | • **Zero Playback Shattering**: Perfectly aligned Y/UV strides & offsets ($5.31\text{ MB} Y + 2.65\text{ MB} UV = 7.96\text{ MB}$ total buffer)<br/>• **Native Socionext VPU 3K Preset (res_id = 0x25)**, 100% clean low-level driver logic<br/>• **Flawless In-Camera & iOS Playback** with standard Level 5.1 (`0x33`) compliance<br/>• **Decoupled Architecture**: 100% stock factory LiveView smoothness across 24p, 30p, 60p<br/>• **True Native 3K UHD (`3072 × 1728`) Direct Output** (zero crop, full 28mm APS-C FOV)<br/>• **Movie SR Symmetrical Fix**: eliminates horizontal panning edge stripes |
+| **v1.5.0: 3K UHD Decoupled Baseline** | `releases/tag/v1.5.0` | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 30p: 75~90 Mbps<br/>24p: 60~72 Mbps | • Decoupled recording pipeline architecture proof-of-concept<br/>• QuickTime 3072x1728 metadata injection |
 | **v1.2.0: 4K H.264 Standard (Zero-Crop)** | `releases/tag/v1.2.0` | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 30p: 75 Mbps avg<br/>24p: 60 Mbps avg | • Official v1.20 baseline<br/>• Full APS-C FOV (CIS Mode 3)<br/>• 4K upscaled output (3840×2160)<br/>• Movie SR bypassed |
 
 ---

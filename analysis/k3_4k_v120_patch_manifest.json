@@ -1,7 +1,7 @@
 {
-  "schema_version": 5,
+  "schema_version": 6,
   "codec": "h264",
-  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.0 Decoupled Pipeline 3072x1728)",
+  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.1 Symmetrical Pipeline 3072x1728)",
   "target": {
     "model": "GR IV Standard Edition",
     "firmware_version": "1.20",
@@ -118,49 +118,49 @@
       "length": 4
     },
     {
-      "id": "slot3_codec_init_width",
-      "description": "CodecParamInit slot 3 width (0x538995a0): mov r2, #0xc00 (3072 px)",
-      "vaddr": "0x538995a0",
-      "offset": "0x8b12c8",
-      "expected_hex": "0f2ca0e3",
-      "replacement_hex": "0c2ca0e3",
+      "id": "slot3_codec_y_size",
+      "description": "CodecYSizeGetter slot 3 branch (0x53898fbc): mov r0, #0; movt r0, #0x51 (0x00510000 = 5,308,416 B)",
+      "vaddr": "0x53898fbc",
+      "offset": "0x8b0ce4",
+      "expected_hex": "0209a0e37f0040e3",
+      "replacement_hex": "0000a0e3510040e3",
+      "length": 8
+    },
+    {
+      "id": "slot3_codec_uv_size",
+      "description": "CodecUvSizeGetter slot 3 branch (0x53899000): moveq r0, #0x288000 (2,654,208 B)",
+      "vaddr": "0x53899000",
+      "offset": "0x8b0d28",
+      "expected_hex": "ff09a003",
+      "replacement_hex": "a209a003",
       "length": 4
     },
     {
-      "id": "sps_level_idc_1",
-      "description": "SPS level_idc setup 1 (0x538991f4): mov r8, #0x34 (Level 5.2)",
-      "vaddr": "0x538991f4",
-      "offset": "0x8b0f1c",
-      "expected_hex": "3380a0e3",
-      "replacement_hex": "3480a0e3",
-      "length": 4
+      "id": "slot3_codec_param_init_block",
+      "description": "CodecParamInit slot 3 block (0x5389959c): Width=3072, Y_Size=0x00510000, UV_Size=0x00288000",
+      "vaddr": "0x5389959c",
+      "offset": "0x8b12c4",
+      "expected_hex": "0239a0e30f2ca0e370240be57f3040e36c340be5ff39a0e3",
+      "replacement_hex": "0030a0e30c2ca0e370240be5513040e36c340be5a239a0e3",
+      "length": 24
     },
     {
-      "id": "sps_level_idc_2",
-      "description": "SPS level_idc setup 2 (0x5389942c): mov r0, #0x34 (Level 5.2)",
-      "vaddr": "0x5389942c",
-      "offset": "0x8b1154",
-      "expected_hex": "3300a0e3",
-      "replacement_hex": "3400a0e3",
-      "length": 4
+      "id": "vpu_table_encode_slot3",
+      "description": "VPU Encode Resolution Table slot 3 (0x5400370f): preset 0x0d -> 0x25 (3072x1728 native)",
+      "vaddr": "0x5400370f",
+      "offset": "0x101b437",
+      "expected_hex": "0d",
+      "replacement_hex": "25",
+      "length": 1
     },
     {
-      "id": "vpu_jump_table_entry_0d",
-      "description": "VPU jump table entry 0x0d (0x530fb404): redirect 0x530fb774 -> 0x530fbea4 (custom MBs 192x108)",
-      "vaddr": "0x530fb404",
-      "offset": "0x11312c",
-      "expected_hex": "74b70f53",
-      "replacement_hex": "a4be0f53",
-      "length": 4
-    },
-    {
-      "id": "vpu_res_table_0d_mb_alloc",
-      "description": "VPU ResTable entry 0x0d macroblock alloc (0x530f0794): mov r3, #0x5100 (20,736 MBs)",
-      "vaddr": "0x530f0794",
-      "offset": "0x1084bc",
-      "expected_hex": "903e07e3",
-      "replacement_hex": "513ca0e3",
-      "length": 4
+      "id": "vpu_table_decode_slot3",
+      "description": "VPU Decode Resolution Table slot 3 (0x5400373b): preset 0x0d -> 0x25 (3072x1728 native)",
+      "vaddr": "0x5400373b",
+      "offset": "0x101b463",
+      "expected_hex": "0d",
+      "replacement_hex": "25",
+      "length": 1
     },
     {
       "id": "playback_h264_res_check_1",

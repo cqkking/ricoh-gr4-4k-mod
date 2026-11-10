@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-verify_k3_4k_v120_patch.py - Automated verification suite for Ricoh GR IV v1.20 3K UHD Video Mod (v1.5.0 Decoupled Pipeline)
+verify_k3_4k_v120_patch.py - Automated verification suite for Ricoh GR IV v1.20 3K UHD Video Mod (v1.5.1 Symmetrical Pipeline)
 
 Validates:
 1. Outer container and inner payload dual word_sum == 0x00000000.
@@ -15,18 +15,22 @@ Validates:
    - LiveViewMovieSetup height override @ 0x5365a724 == mov r0, #0x6c0 (1728 px).
    - LiveViewMovieSetup jump table entry 2 @ 0x5365a7f4 -> 0x5365a878 (res_enum = 0).
    - Resolution tables 0x54008528 and 0x54008578 entry 0 == (3072, 1728).
-6. Dedicated High-Resolution Channel (movie_size = 3):
+6. Dedicated High-Resolution Channel (movie_size = 3) & Zero-Shatter Y/UV Alignment:
    - WidthGetter1 slot 3 @ 0x538997e0 == moveq r0, #0xc00 (3072).
    - WidthGetter2 slot 3 @ 0x53899820 == moveq r0, #0xc00 (3072).
    - HeightGetter 16:9 slot 3 @ 0x5389986c == moveq r0, #0x6c0 (1728).
    - HeightGetter default slot 3 @ 0x53899890 == moveq r0, #0x6c0 (1728).
    - FrameYuvSizeGetter slot 3 @ 0x538998e8 == 0x00798000 (7,962,624 bytes).
    - CodecWidthGetter slot 3 @ 0x53898f7c == moveq r0, #0xc00 (3072).
-   - CodecParamInit slot 3 width @ 0x538995a0 == mov r2, #0xc00 (3072).
-   - SPS level_idc 1 & 2 @ 0x538991f4 & 0x5389942c == Level 5.2 (0x34).
-7. Socionext Milbeaut Hardware VPU 3K UHD Encoding:
-   - VPU jump table entry 0x0d @ 0x530fb404 -> 0x530fbea4 (custom MBs 192x108).
-   - VPU ResTable entry 0x0d macroblock alloc @ 0x530f0794 == mov r3, #0x5100 (20,736 MBs).
+   - CodecYSizeGetter slot 3 @ 0x53898fbc == 0x00510000 (5,308,416 B).
+   - CodecUvSizeGetter slot 3 @ 0x53899000 == 0x00288000 (2,654,208 B).
+   - CodecParamInit slot 3 block @ 0x5389959c == (Width=3072, Y=0x00510000, UV=0x00288000).
+   - SPS level_idc 1 & 2 preserved at stock Level 5.1 (0x33) for in-camera & iOS QuickTime playback.
+7. Socionext Milbeaut Hardware VPU Native 3K Preset (res_id = 0x25):
+   - VPU Encode Resolution Table slot 3 @ 0x5400370f == 0x25.
+   - VPU Decode Resolution Table slot 3 @ 0x5400373b == 0x25.
+   - VPU JumpTable[0x0d] untouched stock (0x530fb774).
+   - VPU JumpTable[0x25] native preset points to 0x530fbea4 (192 MBs x 108 MBs).
 8. Playback H.264 Resolution Checks:
    - PlaybackH264 check 1 @ 0x536e7c14 == cmp r0, #0xc00; cmpeq r1, #0x6c0.
    - PlaybackH264 check 2 @ 0x536e7cb4 == cmp r0, #0xc00; cmpeq r1, #0x6c0.
@@ -71,7 +75,7 @@ def verify_firmware_container(fw_path: Path, label: str) -> bytes:
 
 
 def run_tests() -> None:
-    print("=== Ricoh GR IV v1.20 3K UHD (3072x1728) Video Mod Verification Suite (v1.5.0) ===\n")
+    print("=== Ricoh GR IV v1.20 3K UHD (3072x1728) Video Mod Verification Suite (v1.5.1) ===\n")
     official_raw = OFFICIAL_FW_V120.read_bytes()
     official_payload, _, _ = decode_container(official_raw)
 
@@ -117,7 +121,7 @@ def run_tests() -> None:
     assert (tw0, th0) == (3072, 1728), f"Table entry 0 mismatch: ({tw0}, {th0})"
     print("  [PASS] Static Tables 0x54008528 & 0x54008578: entry 0 == (3072, 1728)")
 
-    # 4. Dedicated High-Resolution Channel (movie_size = 3) Getters
+    # 4. Dedicated High-Resolution Channel (movie_size = 3) Getters & Zero-Shatter Y/UV Alignment
     iw1 = next(md.disasm(patched_payload[v2p(0x538997E0) : v2p(0x538997E4)], 0x538997E0))
     iw2 = next(md.disasm(patched_payload[v2p(0x53899820) : v2p(0x53899824)], 0x53899820))
     ih1 = next(md.disasm(patched_payload[v2p(0x5389986C) : v2p(0x53899870)], 0x5389986C))
@@ -135,25 +139,46 @@ def run_tests() -> None:
     print("  [PASS] FrameYuvSizeGetter: slot 3 returns 0x00798000 (7,962,624 bytes = 3K YUV420)")
 
     icw = next(md.disasm(patched_payload[v2p(0x53898F7C) : v2p(0x53898F80)], 0x53898F7C))
-    icp = next(md.disasm(patched_payload[v2p(0x538995A0) : v2p(0x538995A4)], 0x538995A0))
     assert icw.mnemonic == "moveq" and icw.op_str in ("r0, #0xc00", "r0, #12, #24")
-    assert icp.mnemonic == "mov" and icp.op_str in ("r2, #0xc00", "r2, #12, #24")
-    print("  [PASS] Codec Width & Param Init: 3072 px configured")
+    print("  [PASS] Codec Width: 3072 px configured")
+
+    icy1 = next(md.disasm(patched_payload[v2p(0x53898FBC) : v2p(0x53898FC0)], 0x53898FBC))
+    icy2 = next(md.disasm(patched_payload[v2p(0x53898FC0) : v2p(0x53898FC4)], 0x53898FC0))
+    assert icy1.mnemonic == "mov" and icy1.op_str == "r0, #0"
+    assert icy2.mnemonic == "movt" and icy2.op_str == "r0, #0x51"
+    print("  [PASS] CodecYSizeGetter: slot 3 returns 0x00510000 (5,308,416 B = 3072 x 1728 Y plane)")
+
+    icuv = next(md.disasm(patched_payload[v2p(0x53899000) : v2p(0x53899004)], 0x53899000))
+    assert icuv.mnemonic == "moveq" and icuv.op_str == "r0, #0x288000"
+    print("  [PASS] CodecUvSizeGetter: slot 3 returns 0x00288000 (2,654,208 B = UV plane)")
+
+    i_init_block = list(md.disasm(patched_payload[v2p(0x5389959C) : v2p(0x538995B8)], 0x5389959C))
+    assert i_init_block[0].mnemonic == "mov" and i_init_block[0].op_str == "r3, #0"
+    assert i_init_block[1].mnemonic == "mov" and i_init_block[1].op_str in ("r2, #0xc00", "r2, #12, #24")
+    assert i_init_block[3].mnemonic == "movt" and i_init_block[3].op_str == "r3, #0x51"
+    assert i_init_block[5].mnemonic == "mov" and i_init_block[5].op_str == "r3, #0x288000"
+    print("  [PASS] CodecParamInit: Width=3072, Y_Size=0x00510000, UV_Size=0x00288000 perfectly aligned")
 
     isps1 = next(md.disasm(patched_payload[v2p(0x538991F4) : v2p(0x538991F8)], 0x538991F4))
     isps2 = next(md.disasm(patched_payload[v2p(0x5389942C) : v2p(0x53899430)], 0x5389942C))
-    assert isps1.mnemonic == "mov" and isps1.op_str == "r8, #0x34"
-    assert isps2.mnemonic == "mov" and isps2.op_str == "r0, #0x34"
-    print("  [PASS] SPS level_idc: Level 5.2 (0x34) configured for iOS QuickTime & camera playback")
+    assert isps1.mnemonic == "mov" and isps1.op_str in ("r8, #0x33", "r8, #51")
+    assert isps2.mnemonic == "mov" and isps2.op_str in ("r0, #0x33", "r0, #51")
+    print("  [PASS] SPS level_idc: Stock Level 5.1 (0x33) preserved for in-camera & iOS playback compatibility")
 
-    # 5. Socionext Milbeaut Hardware VPU Custom Macroblocks
-    vpu_target = struct.unpack("<I", patched_payload[v2p(0x530FB404) : v2p(0x530FB408)])[0]
-    assert vpu_target == 0x530FBEA4, f"VPU jump table mismatch: {vpu_target:#x} != 0x530fbea4"
-    print("  [PASS] VPU Hardware: JumpTable[0x0d] -> 0x530fbea4 (custom MBs 192x108 = 3072x1728)")
+    # 5. Socionext Milbeaut Hardware VPU Native 3K Preset (res_id = 0x25)
+    enc_slot3 = patched_payload[v2p(0x5400370F)]
+    dec_slot3 = patched_payload[v2p(0x5400373B)]
+    assert enc_slot3 == 0x25, f"Encode table slot 3 mismatch: {enc_slot3:#x} != 0x25"
+    assert dec_slot3 == 0x25, f"Decode table slot 3 mismatch: {dec_slot3:#x} != 0x25"
+    print("  [PASS] VPU Resolution Tables: Encode & Decode slot 3 activate native preset 0x25 (37)")
 
-    i_vpu_mb = next(md.disasm(patched_payload[v2p(0x530F0794) : v2p(0x530F0798)], 0x530F0794))
-    assert i_vpu_mb.mnemonic == "mov" and i_vpu_mb.op_str in ("r3, #0x5100", "r3, #81, #24")
-    print("  [PASS] VPU ResTable: entry 0x0d allocates 20,736 MBs (0x5100)")
+    vpu_stock_0d = struct.unpack("<I", patched_payload[v2p(0x530FB404) : v2p(0x530FB408)])[0]
+    assert vpu_stock_0d == 0x530FB774, f"VPU jump table entry 0x0d not stock: {vpu_stock_0d:#x}"
+    print("  [PASS] VPU Hardware: JumpTable[0x0d] untouched stock (clean low-level driver)")
+
+    vpu_target_25 = struct.unpack("<I", patched_payload[v2p(0x530FB464) : v2p(0x530FB468)])[0]
+    assert vpu_target_25 == 0x530FBEA4, f"VPU JumpTable[0x25] mismatch: {vpu_target_25:#x}"
+    print("  [PASS] VPU Hardware: Native Preset 0x25 points to 0x530fbea4 (192 MBs x 108 MBs)")
 
     # 6. Playback H.264 Resolution Checks
     p_chk1 = list(md.disasm(patched_payload[v2p(0x536E7C14) : v2p(0x536E7C1C)], 0x536E7C14))
@@ -193,7 +218,7 @@ def run_tests() -> None:
 
     diffs = diff_offsets(official_payload, patched_payload)
     print(f"\n[SUMMARY] Total modified payload bytes: {len(diffs)} bytes (including rezero checksum word)")
-    print("ALL v1.5.0 DECOUPLED 3K UHD VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
+    print("ALL v1.5.1 SYMMETRICAL 3K UHD VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
 
 
 if __name__ == "__main__":
