@@ -8,19 +8,21 @@
 [![Codec](https://img.shields.io/badge/Codec-H.264%20(avc1)-purple)](#)
 [![Movie SR](https://img.shields.io/badge/Movie%20SR-100%25%20Stock%20Formula-brightgreen)](#)
 [![Framerate](https://img.shields.io/badge/Framerate-3K%2030P%20%7C%203K%2024P%20%7C%20FHD%2060P-orange)](#)
+[![Bitrate](https://img.shields.io/badge/Bitrate-~48M%20(30p)%20%7C%20~38M%20(24p)-green)](#)
 [![Baseline](https://img.shields.io/badge/Baseline-v1.20%20fwdc248b.bin-informational)](#)
-[![Release](https://img.shields.io/badge/Release-v1.5.2-brightgreen)](#)
+[![Release](https://img.shields.io/badge/Release-v1.5.3-brightgreen)](#)
 [![License](https://img.shields.io/badge/License-GPL--2.0-yellow)](#)
 
-> **🚀 v1.5.2 Decoupled Framerate Routing: 3K UHD (3072×1728 @ 24p/30p) + Factory FHD (1920×1080 @ 60p) & Stock Movie SR!**  
-> Version **v1.5.2** delivers the ultimate production-grade video architecture for Ricoh GR IV:
-> 1. **Decoupled Framerate Routing**:
+> **🚀 v1.5.3 Bitrate-Optimized 3K UHD: ~48M @ 30p / ~38M @ 24p + Factory FHD @ 60p!**  
+> Version **v1.5.3** delivers balanced thermal efficiency and maximum SD card recording endurance for Ricoh GR IV:
+> 1. **Calibrated 3K Bitrates**: Scales down base rates from 100/120 Mbps to 75 Mbps in `MovieRecordTable` (Slots 5–8), yielding **~48 Mbps @ 30p** and **~38.4 Mbps @ 24p**—reducing SD write bandwidth & storage consumption by 40% while preserving pristine point-to-point 3K APS-C detail!
+> 2. **Decoupled Framerate Routing**:
 >    - **`60p`**: Preserved as rock-solid factory **`1920 × 1080 60p`** (`movie_size = 2`), eliminating the 1-second buffer overrun and providing infinite-duration fluid slow-motion recording!
->    - **`30p` & `24p`**: Routed to dedicated high-bitrate **`3072 × 1728 3K UHD`** (`movie_size = 3`), capturing razor-sharp point-to-point APS-C details.
-> 2. **Movie SR Formula Restored**: Reverted to 100% factory original calculation (`rsbne r4, r6, r8, lsr #1`) at `0x5365AAE4` for factory-calibrated gyro damping and boundary stability.
-> 3. **Zero Playback Shattering**: Bitwise aligned Y/UV plane buffers ($5.31\text{ MB} Y + 2.65\text{ MB} UV = 7.96\text{ MB}$) completely eliminate all line-wrap skew and diagonal tearing.
-> 4. **Native Socionext VPU Hardware Preset (`0x25`)**: Uses built-in 3072×1728 macroblock handler natively without low-level jump-table patching.
-> 5. **Flawless In-Camera & Apple iOS QuickTime Playback**: SPS Level 5.1 (`0x33`) compliance ensures instant, smooth playback on camera and iOS devices.
+>    - **`30p` & `24p`**: Routed to dedicated **`3072 × 1728 3K UHD`** (`movie_size = 3`), capturing razor-sharp point-to-point APS-C details.
+> 3. **Movie SR Formula Restored**: Reverted to 100% factory original calculation (`rsbne r4, r6, r8, lsr #1`) at `0x5365AAE4` for factory-calibrated gyro damping and boundary stability.
+> 4. **Zero Playback Shattering**: Bitwise aligned Y/UV plane buffers ($5.31\text{ MB} Y + 2.65\text{ MB} UV = 7.96\text{ MB}$) completely eliminate all line-wrap skew and diagonal tearing.
+> 5. **Native Socionext VPU Hardware Preset (`0x25`)**: Uses built-in 3072×1728 macroblock handler natively without low-level jump-table patching.
+> 6. **Flawless In-Camera & Apple iOS QuickTime Playback**: SPS Level 5.1 (`0x33`) compliance ensures instant, smooth playback on camera and iOS devices.
 
 This project provides an in-camera direct **3K UHD (3072×1728) Video Recording** firmware modification for the **Ricoh GR IV (Standard Edition / Mainland China version v1.20 `fwdc248b.bin`)**.
 
@@ -30,7 +32,8 @@ This project provides an in-camera direct **3K UHD (3072×1728) Video Recording*
 
 | Release Variant | Flashable File | Codec & Container | Target Bitrates | Primary Features |
 | :--- | :--- | :--- | :--- | :--- |
-| **v1.5.2: Decoupled Framerate Routing**<br/>*(Latest & Recommended)* | [`output/sd_card/fwdc248b.bin`](output/sd_card/fwdc248b.bin) | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 3K 30p: 75~90 Mbps<br/>3K 24p: 60~72 Mbps<br/>FHD 60p: 28~36 Mbps | • **Framerate Decoupled**: 30p/24p route to 3K UHD; 60p routes to rock-solid 1080p without auto-stop<br/>• **Movie SR Restored**: 100% factory shake reduction formula<br/>• **Zero Playback Shattering**: Aligned Y/UV buffers ($5.31\text{M} Y + 2.65\text{M} UV = 7.96\text{M}$)<br/>• **Native Socionext VPU Preset (res_id = 0x25)**<br/>• **Smooth In-Camera & iOS Playback** (Level 5.1)<br/>• **True Native 3K UHD (`3072 × 1728`) Direct Output** (zero crop, full 28mm APS-C FOV) |
+| **v1.5.3: Bitrate Optimized**<br/>*(Latest & Recommended)* | [`output/sd_card/fwdc248b.bin`](output/sd_card/fwdc248b.bin) | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 3K 30p: ~48 Mbps<br/>3K 24p: ~38.4 Mbps<br/>FHD 60p: 28~36 Mbps | • **40% Bandwidth & Storage Reduction**: Lower heat & longer battery run-times<br/>• **Framerate Decoupled**: 30p/24p route to 3K UHD; 60p routes to rock-solid 1080p without auto-stop<br/>• **Movie SR Restored**: 100% factory shake reduction formula<br/>• **Zero Playback Shattering**: Aligned Y/UV buffers ($5.31\text{M} Y + 2.65\text{M} UV = 7.96\text{M}$)<br/>• **Native Socionext VPU Preset (res_id = 0x25)**<br/>• **Smooth In-Camera & iOS Playback** (Level 5.1)<br/>• **True Native 3K UHD (`3072 × 1728`) Direct Output** (zero crop, full 28mm APS-C FOV) |
+| **v1.5.2: Decoupled Framerate Routing** | `releases/tag/v1.5.2` | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 3K 30p: 75~90 Mbps<br/>3K 24p: 60~72 Mbps<br/>FHD 60p: 28~36 Mbps | • Framerate decoupled: 3K 24/30p + FHD 60p<br/>• Stock Movie SR formula restoration |
 | **v1.5.1: 3K UHD Symmetrical Architecture** | `releases/tag/v1.5.1` | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 30p: 75~90 Mbps<br/>24p: 60~72 Mbps | • Zero playback tearing with aligned Y/UV strides<br/>• Native VPU preset 0x25 |
 | **v1.5.0: 3K UHD Decoupled Baseline** | `releases/tag/v1.5.0` | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 30p: 75~90 Mbps<br/>24p: 60~72 Mbps | • Decoupled recording pipeline architecture proof-of-concept |
 

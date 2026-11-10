@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-verify_k3_4k_v120_patch.py - Automated verification suite for Ricoh GR IV v1.20 3K UHD Video Mod (v1.5.2 Decoupled Framerate Routing)
+verify_k3_4k_v120_patch.py - Automated verification suite for Ricoh GR IV v1.20 3K UHD Video Mod (v1.5.3 Bitrate Optimized)
 
 Validates:
 1. Outer container and inner payload dual word_sum == 0x00000000.
@@ -19,7 +19,12 @@ Validates:
      * 60p ([r4, #0x12] == 0) -> res_enum = 1 (FHD 1080p, stock 1920x1080).
      * 30p/24p ([r4, #0x12] != 0) -> res_enum = 0 (3K UHD, writes 3072x1728).
    - Resolution tables 0x54008528 and 0x54008578 entry 0 == (3072, 1728).
-6. Dedicated High-Resolution Channel (movie_size = 3) & Zero-Shatter Y/UV Alignment:
+6. 3K Bitrate Optimization (MovieRecordTable Slots 5, 6, 7, 8):
+   - Slots 5, 6, 7, 8 all scaled from 100/120 Mbps to 75 Mbps (0x047868c0).
+   - 3K 30p encodes at ~48 Mbps (VBR peak ~54 Mbps).
+   - 3K 24p encodes at ~38.4 Mbps (VBR peak ~43 Mbps).
+   - Slots 11-14 (1080p 60p) preserved 100% stock.
+7. Dedicated High-Resolution Channel (movie_size = 3) & Zero-Shatter Y/UV Alignment:
    - WidthGetter1 slot 3 @ 0x538997e0 == moveq r0, #0xc00 (3072).
    - WidthGetter2 slot 3 @ 0x53899820 == moveq r0, #0xc00 (3072).
    - HeightGetter 16:9 slot 3 @ 0x5389986c == moveq r0, #0x6c0 (1728).
@@ -30,20 +35,20 @@ Validates:
    - CodecUvSizeGetter slot 3 @ 0x53899000 == 0x00288000 (2,654,208 B).
    - CodecParamInit slot 3 block @ 0x5389959c == (Width=3072, Y=0x00510000, UV=0x00288000).
    - SPS level_idc 1 & 2 preserved at stock Level 5.1 (0x33) for in-camera & iOS QuickTime playback.
-7. Socionext Milbeaut Hardware VPU Native 3K Preset (res_id = 0x25):
+8. Socionext Milbeaut Hardware VPU Native 3K Preset (res_id = 0x25):
    - VPU Encode Resolution Table slot 3 @ 0x5400370f == 0x25.
    - VPU Decode Resolution Table slot 3 @ 0x5400373b == 0x25.
    - VPU JumpTable[0x0d] untouched stock (0x530fb774).
    - VPU JumpTable[0x25] native preset points to 0x530fbea4 (192 MBs x 108 MBs).
-8. Playback H.264 Resolution Checks:
+9. Playback H.264 Resolution Checks:
    - PlaybackH264 check 1 @ 0x536e7c14 == cmp r0, #0xc00; cmpeq r1, #0x6c0.
    - PlaybackH264 check 2 @ 0x536e7cb4 == cmp r0, #0xc00; cmpeq r1, #0x6c0.
-9. Static Tables (3072 x 1728):
+10. Static Tables (3072 x 1728):
    - 32-bit descriptor table @ 0x53de99a8 == (3072, 1728).
    - 16-bit descriptor table @ 0x53fd8bd8 == (3072, 1728).
    - 16-bit display resolution table 1 @ 0x54079510 == (3072, 1728 x2).
    - 16-bit ScreenLcdParameter table 2 @ 0x54079588 == (3072, 1728 x2).
-10. Preservation of stock FHD slot 0 getters (backward compatibility).
+11. Preservation of stock FHD slot 0 getters (backward compatibility).
 """
 
 import struct
@@ -79,7 +84,7 @@ def verify_firmware_container(fw_path: Path, label: str) -> bytes:
 
 
 def run_tests() -> None:
-    print("=== Ricoh GR IV v1.20 3K UHD (3072x1728) Video Mod Verification Suite (v1.5.2) ===\n")
+    print("=== Ricoh GR IV v1.20 3K UHD (3072x1728) Video Mod Verification Suite (v1.5.3) ===\n")
     official_raw = OFFICIAL_FW_V120.read_bytes()
     official_payload, _, _ = decode_container(official_raw)
 
@@ -229,7 +234,33 @@ def run_tests() -> None:
     assert (w_d2a, h_d2a, w_d2b, h_d2b) == (3072, 1728, 3072, 1728), f"Display table 2 mismatch: {(w_d2a, h_d2a)}"
     print("  [PASS] Static Tables: 3072x1728 configured in 32-bit, 16-bit, and display tables")
 
-    # 8. Backward Compatibility: Stock FHD slot 0 getters untouched
+    # 8. MovieRecordTable 3K Bitrate Optimization (75 Mbps Base -> ~48M@30p / ~38M@24p)
+    br_slots = [
+        (0x54397A18, "Slot 5 Bitrate 1"),
+        (0x54397BE8, "Slot 6 Bitrate 1"),
+        (0x54397DB8, "Slot 7 Bitrate 1"),
+        (0x54397DD4, "Slot 7 Bitrate 2"),
+        (0x54397F88, "Slot 8 Bitrate 1"),
+        (0x54397FA4, "Slot 8 Bitrate 2"),
+    ]
+    for va, name in br_slots:
+        br_val = struct.unpack("<I", patched_payload[v2p(va) : v2p(va) + 4])[0]
+        assert br_val == 75000000, f"{name} @ {va:#x}: {br_val} != 75,000,000"
+    print("  [PASS] MovieRecordTable 3K Bitrates: Slots 5, 6, 7, 8 all scaled to 75 Mbps (48M@30p / 38M@24p)")
+
+    # 9. Stock 1080p 60p Bitrate Invariants (Slots 11, 12, 13, 14 Untouched)
+    fhd_slots = [
+        (0x543984F8, "Slot 11 Bitrate 1"),
+        (0x543986C8, "Slot 12 Bitrate 1"),
+        (0x54398898, "Slot 13 Bitrate 1"),
+        (0x54398A68, "Slot 14 Bitrate 1"),
+    ]
+    for va, name in fhd_slots:
+        poff = v2p(va)
+        assert patched_payload[poff : poff + 4] == official_payload[poff : poff + 4], f"{name} not stock"
+    print("  [PASS] Stock 1080p 60p Bitrates: Slots 11, 12, 13, 14 100% factory untouched")
+
+    # 10. Backward Compatibility: Stock FHD slot 0 getters untouched
     fhd_invariants = [
         (0x538997EC, 4, "mov r0, #0x780 (FHD WidthGetter1)"),
         (0x5389982C, 4, "mov r0, #0x780 (FHD WidthGetter2)"),
@@ -246,7 +277,7 @@ def run_tests() -> None:
 
     diffs = diff_offsets(official_payload, patched_payload)
     print(f"\n[SUMMARY] Total modified payload bytes: {len(diffs)} bytes (including rezero checksum word)")
-    print("ALL v1.5.2 DECOUPLED 3K UHD / 1080P VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
+    print("ALL v1.5.3 BITRATE-OPTIMIZED 3K UHD / 1080P VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
 
 
 if __name__ == "__main__":

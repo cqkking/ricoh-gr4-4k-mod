@@ -1,7 +1,7 @@
 {
-  "schema_version": 7,
+  "schema_version": 8,
   "codec": "h264",
-  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.2 Decoupled 3K@24/30p + 1080@60p)",
+  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.3 Bitrate Optimized 48M@30p / 38M@24p + 1080@60p)",
   "target": {
     "model": "GR IV Standard Edition",
     "firmware_version": "1.20",
@@ -206,6 +206,60 @@
       "expected_hex": "000f7008000f7008",
       "replacement_hex": "000cc006000cc006",
       "length": 8
+    },
+    {
+      "id": "table_movie_record_slot5_bitrate1",
+      "description": "MovieRecordTable Slot 5 Bitrate 1 (0x54397a18): 120 Mbps (0x07270e00) -> 75 Mbps (0x047868c0)",
+      "vaddr": "0x54397a18",
+      "offset": "0x13af740",
+      "expected_hex": "000e2707",
+      "replacement_hex": "c0687804",
+      "length": 4
+    },
+    {
+      "id": "table_movie_record_slot6_bitrate1",
+      "description": "MovieRecordTable Slot 6 Bitrate 1 (0x54397be8): 120 Mbps (0x07270e00) -> 75 Mbps (0x047868c0)",
+      "vaddr": "0x54397be8",
+      "offset": "0x13af910",
+      "expected_hex": "000e2707",
+      "replacement_hex": "c0687804",
+      "length": 4
+    },
+    {
+      "id": "table_movie_record_slot7_bitrate1",
+      "description": "MovieRecordTable Slot 7 Bitrate 1 (0x54397db8): 100 Mbps (0x05f5e100) -> 75 Mbps (0x047868c0)",
+      "vaddr": "0x54397db8",
+      "offset": "0x13afae0",
+      "expected_hex": "00e1f505",
+      "replacement_hex": "c0687804",
+      "length": 4
+    },
+    {
+      "id": "table_movie_record_slot7_bitrate2",
+      "description": "MovieRecordTable Slot 7 Bitrate 2 (0x54397dd4): 100 Mbps (0x05f5e100) -> 75 Mbps (0x047868c0)",
+      "vaddr": "0x54397dd4",
+      "offset": "0x13afafc",
+      "expected_hex": "00e1f505",
+      "replacement_hex": "c0687804",
+      "length": 4
+    },
+    {
+      "id": "table_movie_record_slot8_bitrate1",
+      "description": "MovieRecordTable Slot 8 Bitrate 1 (0x54397f88): 120 Mbps (0x07270e00) -> 75 Mbps (0x047868c0)",
+      "vaddr": "0x54397f88",
+      "offset": "0x13afcb0",
+      "expected_hex": "000e2707",
+      "replacement_hex": "c0687804",
+      "length": 4
+    },
+    {
+      "id": "table_movie_record_slot8_bitrate2",
+      "description": "MovieRecordTable Slot 8 Bitrate 2 (0x54397fa4): 120 Mbps (0x07270e00) -> 75 Mbps (0x047868c0)",
+      "vaddr": "0x54397fa4",
+      "offset": "0x13afccc",
+      "expected_hex": "000e2707",
+      "replacement_hex": "c0687804",
+      "length": 4
     }
   ]
 }
