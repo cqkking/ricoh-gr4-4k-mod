@@ -1,7 +1,7 @@
 {
-  "schema_version": 6,
+  "schema_version": 7,
   "codec": "h264",
-  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.1 Symmetrical Pipeline 3072x1728)",
+  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.2 Decoupled 3K@24/30p + 1080@60p)",
   "target": {
     "model": "GR IV Standard Edition",
     "firmware_version": "1.20",
@@ -10,40 +10,31 @@
   },
   "changes": [
     {
-      "id": "fix_movie_sr_active_width_symmetrical",
-      "description": "Fix Movie SR Active Width calculation (subne r4, r8, r6, lsl #1 -> Width - MarginX * 2)",
-      "vaddr": "0x5365aae4",
-      "offset": "0x67280c",
-      "expected_hex": "a8406610",
-      "replacement_hex": "86404810",
-      "length": 4
-    },
-    {
-      "id": "liveview_movie_setup_width",
-      "description": "LiveViewMovieSetup width override (0x5365a718): mov r0, #0xc00 (3072 px)",
-      "vaddr": "0x5365a718",
-      "offset": "0x672440",
-      "expected_hex": "a46109eb",
-      "replacement_hex": "0c0ca0e3",
-      "length": 4
-    },
-    {
-      "id": "liveview_movie_setup_height",
-      "description": "LiveViewMovieSetup height override (0x5365a724): mov r0, #0x6c0 (1728 px)",
-      "vaddr": "0x5365a724",
-      "offset": "0x67244c",
-      "expected_hex": "ab6109eb",
-      "replacement_hex": "6c0ea0e3",
+      "id": "liveview_movie_setup_fps_guard",
+      "description": "LiveViewMovieSetup FPS branch guard (0x5365a7a8): bne 0x5365a880 -> nop",
+      "vaddr": "0x5365a7a8",
+      "offset": "0x6724d0",
+      "expected_hex": "3400001a",
+      "replacement_hex": "0000a0e1",
       "length": 4
     },
     {
       "id": "liveview_movie_setup_res_enum_jump",
-      "description": "LiveViewMovieSetup jump table entry 2 (0x5365a7f4): redirect to 0x5365a878 (res_enum = 0)",
+      "description": "LiveViewMovieSetup jump table entry 2 (0x5365a7f4): redirect to 0x5365a878 (dispatch)",
       "vaddr": "0x5365a7f4",
       "offset": "0x67251c",
       "expected_hex": "28a86553",
       "replacement_hex": "78a86553",
       "length": 4
+    },
+    {
+      "id": "liveview_movie_setup_framerate_dispatch",
+      "description": "LiveViewMovieSetup framerate dispatch (0x5365a878): 60p->FHD (res_enum=1), 30p/24p->3K (res_enum=0)",
+      "vaddr": "0x5365a878",
+      "offset": "0x6725a0",
+      "expected_hex": "0030a0e3eaffffea00708de5e0130de36c2d04e3001445e3ee2345e30000a0e35c3002e315eb0aebc1ffffea",
+      "replacement_hex": "1230d4e5000053e30130a003e8ffff0a0c0ca0e3b200c4e11b0da0e3b400c4e10030a0e3e2ffffea0000a0e1",
+      "length": 44
     },
     {
       "id": "table_54008528_width_0",

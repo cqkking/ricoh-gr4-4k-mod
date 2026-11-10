@@ -1,20 +1,25 @@
 #!/usr/bin/env python3
 """
-build_4k_v120_firmware.py - Build Ricoh GR IV v1.20 Flashable 3K UHD Video Mod (v1.5.1 Symmetrical Pipeline)
+build_4k_v120_firmware.py - Build Ricoh GR IV v1.20 Flashable 3K UHD Video Mod (v1.5.2 Decoupled Framerate Routing)
 
-Core Architecture of v1.5.1 Symmetrical Pipeline:
+Core Architecture of v1.5.2 Decoupled Framerate Routing:
 1. LiveView 100% Stock Untouched:
    - Preserves official stock IsDebug4KMovie (0x538ad500) and SetMovieResolution (0x538b376c).
    - Keeps LiveViewResolutionManager offset +9 == 2 across all frame rates (24p, 30p, 60p).
    - LiveView runs on CIS Mode 3 (3120x1755, full APS-C 28mm wide FOV) with factory Plan 2 planner.
    - Zero LiveView freezing, zero frame looping, zero recipe mismatch.
-2. Decoupled Recording at LiveViewMovieSetup (0x5365a6c0):
-   - Overrides width getter call at 0x5365a718 with mov r0, #0xc00 (3072).
-   - Overrides height getter call at 0x5365a724 with mov r0, #0x6c0 (1728).
-   - Reroutes jump table entry 2 at 0x5365a7f4 to 0x5365a878 (mov r3, #0), writing res_enum = 0.
-   - Updates static tables 0x54008528 and 0x54008578 entry 0 to (3072, 1728).
-   - Guarantees .MOV container metadata (tkhd, avc1) writes true 3072x1728.
-3. Dedicated High-Resolution Channel (movie_size = 3):
+2. Framerate-Decoupled Dynamic Dispatch at LiveViewMovieSetup (0x5365a6c0):
+   - Preserves stock getters at 0x5365a718 & 0x5365a724 (defaulting to 1920x1080).
+   - Reroutes jump table entry 2 at 0x5365a7f4 to dynamic dispatch block at 0x5365a878.
+   - If Framerate == 60p ([r4, #0x12] == 0):
+     * Keeps width = 1920, height = 1080.
+     * Sets res_enum = 1 (movie_size = 2 / FHD 60p).
+     * 100% factory rock-solid 60p slow-motion without buffer overrun!
+   - If Framerate == 30p or 24p ([r4, #0x12] == 2 or 4):
+     * Overwrites width = 3072 (0x0c00) and height = 1728 (0x06c0).
+     * Sets res_enum = 0 (movie_size = 3 / 3K UHD).
+     * Activates 3K UHD pipeline with 13.5MB ring buffer and native VPU preset 0x25.
+3. Dedicated High-Resolution Channel (movie_size = 3 @ 24p/30p):
    - MapResEnumToMovieSize(0) cleanly routes to movie_size = 3.
    - Ring buffer pool allocates 13.5MB per slot (safely holding 7.59MB 3K YUV frame).
    - Bitstream buffers allocate 8MB primary + 4MB secondary.
@@ -33,9 +38,8 @@ Core Architecture of v1.5.1 Symmetrical Pipeline:
    - Directly activates built-in hardware preset 0x25 in Encode/Decode tables (0x5400370f & 0x5400373b).
    - Naturally engages VPU hardware handler (0x530fbea4: 192 MBs width, 108 MBs height, 20,736 total MBs).
    - Zero hacky jump-table redirection, keeping low-level driver 100% clean and native.
-6. In-Camera Playback & Symmetrical Movie SR:
-   - PlaybackH264 resolution checks updated to 3072x1728.
-   - Movie SR active width calculation at 0x5365aae4 fixed to symmetrical Width - MarginX * 2.
+6. Stock Movie SR Formula Restored (0x5365aae4):
+   - Preserves stock rsbne r4, r6, r8, lsr #1 for 100% factory Movie SR calculation.
 7. Container dual 32-bit checksum balance (word_sum == 0x00000000) & LZSS round-trip integrity.
 """
 
@@ -108,54 +112,41 @@ def generate_patch_spec_v120(official_payload: bytes) -> dict:
     changes = []
 
     # -------------------------------------------------------------------------
-    # 1. Movie SR Symmetrical Active Width Bug Fix (0x5365AAE4)
-    # Stock had flawed division by 2: rsbne r4, r6, r8, lsr #1 -> (Width >> 1) - MarginX.
-    # Patched sets Active Width = Width - MarginX * 2 (subne r4, r8, r6, lsl #1),
-    # matching the vertical height calculation (0x5365aaf8: sub lr, r7, r5, lsl #1).
-    # Completely eliminates horizontal panning edge stripe artifacts while keeping Movie SR functional!
+    # 1. Decoupled Dynamic Framerate Routing at LiveViewMovieSetup (0x5365A6C0)
+    # Reroutes JumpTable[2] (0x5365a7f4) to dynamic dispatch block at 0x5365a878.
+    # - If framerate == 60p ([r4, #0x12] == 0):
+    #     res_enum = 1 (movie_size = 2 / FHD 1080p 60p), width=1920, height=1080.
+    # - If framerate == 30p / 24p ([r4, #0x12] != 0):
+    #     res_enum = 0 (movie_size = 3 / 3K UHD 3072x1728), width=3072, height=1728.
     # -------------------------------------------------------------------------
     add_patch(
         changes,
         official_payload,
-        "fix_movie_sr_active_width_symmetrical",
-        "Fix Movie SR Active Width calculation (subne r4, r8, r6, lsl #1 -> Width - MarginX * 2)",
-        0x5365AAE4,
-        "a8406610",
-        bytes.fromhex("86404810"),
-    )
-
-    # -------------------------------------------------------------------------
-    # 2. Decouple Movie Recording at LiveViewMovieSetup (0x5365A6C0)
-    # Write 3072x1728 directly into MovieStartParam [+2] and [+4] for .MOV container
-    # -------------------------------------------------------------------------
-    add_patch(
-        changes,
-        official_payload,
-        "liveview_movie_setup_width",
-        "LiveViewMovieSetup width override (0x5365a718): mov r0, #0xc00 (3072 px)",
-        0x5365A718,
-        "a46109eb",
-        bytes.fromhex("0c0ca0e3"),
-    )
-
-    add_patch(
-        changes,
-        official_payload,
-        "liveview_movie_setup_height",
-        "LiveViewMovieSetup height override (0x5365a724): mov r0, #0x6c0 (1728 px)",
-        0x5365A724,
-        "ab6109eb",
-        bytes.fromhex("6c0ea0e3"),
+        "liveview_movie_setup_fps_guard",
+        "LiveViewMovieSetup FPS branch guard (0x5365a7a8): bne 0x5365a880 -> nop",
+        0x5365A7A8,
+        "3400001a",
+        bytes.fromhex("0000a0e1"),
     )
 
     add_patch(
         changes,
         official_payload,
         "liveview_movie_setup_res_enum_jump",
-        "LiveViewMovieSetup jump table entry 2 (0x5365a7f4): redirect to 0x5365a878 (res_enum = 0)",
+        "LiveViewMovieSetup jump table entry 2 (0x5365a7f4): redirect to 0x5365a878 (dispatch)",
         0x5365A7F4,
         "28a86553",
         bytes.fromhex("78a86553"),
+    )
+
+    add_patch(
+        changes,
+        official_payload,
+        "liveview_movie_setup_framerate_dispatch",
+        "LiveViewMovieSetup framerate dispatch (0x5365a878): 60p->FHD (res_enum=1), 30p/24p->3K (res_enum=0)",
+        0x5365A878,
+        "0030a0e3eaffffea00708de5e0130de36c2d04e3001445e3ee2345e30000a0e35c3002e315eb0aebc1ffffea",
+        bytes.fromhex("1230d4e5000053e30130a003e8ffff0a0c0ca0e3b200c4e11b0da0e3b400c4e10030a0e3e2ffffea0000a0e1"),
     )
 
     add_patch(
@@ -362,9 +353,9 @@ def generate_patch_spec_v120(official_payload: bytes) -> dict:
     )
 
     return {
-        "schema_version": 6,
+        "schema_version": 7,
         "codec": "h264",
-        "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.1 Symmetrical Pipeline 3072x1728)",
+        "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.2 Decoupled 3K@24/30p + 1080@60p)",
         "target": {
             "model": "GR IV Standard Edition",
             "firmware_version": "1.20",
@@ -428,7 +419,7 @@ def build() -> Path:
         print(f"[SUCCESS] Wrote firmware -> {out_p.resolve()} ({len(out_container):,} bytes)")
 
     print(
-        f"\n[SUMMARY] Built Ricoh GR IV v1.20 3K UHD (3072x1728) H.264 Firmware (v1.5.1 Symmetrical):\n"
+        f"\n[SUMMARY] Built Ricoh GR IV v1.20 3K UHD (3072x1728) H.264 Firmware (v1.5.2 Decoupled 3K@24/30p + 1080@60p):\n"
         f"  Container Size : {len(out_container):,} bytes\n"
         f"  Changed Bytes  : {len(changed)} bytes\n"
         f"  Frames Re-LZSS : {reemitted} frames\n"

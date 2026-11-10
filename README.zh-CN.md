@@ -3,22 +3,24 @@
 [English](README.md) | **[简体中文](README.zh-CN.md)**
 
 [![Firmware Checksum](https://img.shields.io/badge/Word--Sum%20Checksum-0x00000000%20(PASS)-brightgreen)](#)
-[![Resolution](https://img.shields.io/badge/Resolution-3072%C3%971728%20(3K%20UHD)-blue)](#)
+[![Resolution](https://img.shields.io/badge/Resolution-3072%C3%971728%20(3K%20UHD)%20%7C%201920%C3%971080%20(FHD)-blue)](#)
 [![FOV](https://img.shields.io/badge/FOV-%E5%85%A8%E7%94%BB%E5%B9%85%20APS--C%20%E9%9B%B6%E8%A3%81%E5%88%87-brightgreen)](#)
 [![Codec](https://img.shields.io/badge/Codec-H.264%20(avc1)-purple)](#)
-[![Movie SR](https://img.shields.io/badge/Movie%20SR-%E5%AE%8C%E6%95%B4%E6%81%A2%E5%A4%8D%E4%B8%8E%E5%AF%B9%E7%A7%B0%E4%BF%AE%E5%A4%8D-brightgreen)](#)
-[![Framerate](https://img.shields.io/badge/Framerate-3K%2060P%20%7C%203K%2030P%20%7C%203K%2024P-orange)](#)
+[![Movie SR](https://img.shields.io/badge/Movie%20SR-100%25%20%E5%8E%9F%E5%8E%82%E7%AE%97%E6%B3%95%E5%A4%8D%E5%8E%9F-brightgreen)](#)
+[![Framerate](https://img.shields.io/badge/Framerate-3K%2030P%20%7C%203K%2024P%20%7C%20FHD%2060P-orange)](#)
 [![Baseline](https://img.shields.io/badge/Baseline-v1.20%20fwdc248b.bin-informational)](#)
-[![Release](https://img.shields.io/badge/Release-v1.5.1-brightgreen)](#)
+[![Release](https://img.shields.io/badge/Release-v1.5.2-brightgreen)](#)
 [![License](https://img.shields.io/badge/License-GPL--2.0-yellow)](#)
 
-> **🚀 v1.5.1 对称管线架构：彻底终结画面撕裂花屏，原生硬件 VPU 直录 3K UHD！**  
-> 版本 **v1.5.1** 精准修复了 v1.5.0 在真机实测中出现的三大物理缺陷：
-> 1. **全帧率回放画面撕裂花屏彻底根治**：在 `CodecParamInit` 与各层 Getter 中成对完成 Y 平面（`0x00510000` = 5.31 MB）与 UV 色度平面（`0x00288000` = 2.65 MB）总计 7.96 MB（`0x00798000`）的严格数学闭环，彻底消除 Y/UV 内存错位踩踏与斜向行错位撕裂！
-> 2. **直接激活 Socionext VPU 原生内置 3K 预设（res_id = 0x25）**：在编码/解码表中直接调用 Milbeaut 硬件芯片原生支持的第 37 号预设，底层驱动零篡改、零跳转表黑客注入，以原厂官方逻辑原生输出 192 宏块宽 × 108 宏块高（20,736 宏块）！
-> 3. **完美恢复机内回放与 iPhone / Mac 硬件解码**：SPS 规范严格恢复为原厂 Level 5.1（`0x33`），消除 M10V 机内硬解芯片对超规格 Level 5.2 的报错与卡死，机内即录即播！
-> 4. **解耦取景管线零冻屏**：取景 100% 沿用官方 Plan 2 与 CIS Mode 3，28mm 原生广角丝滑无卡顿。
-> 5. **动画防抖 (Movie SR) 几何对称修复**：有效宽度计算修正为对称（`subne r4, r8, r6, lsl #1`），横摇无竖纹。
+> **🚀 v1.5.2 帧率解耦动态路由版：3K UHD (3072×1728 @ 24p/30p) + 原厂 1080p 60p & 动画防抖官方复原！**  
+> 版本 **v1.5.2** 带来了终极生产力级别的 GR IV 视频录制架构：
+> 1. **帧率解耦动态路由架构**：
+>    - **`60p`**：自动保留为原厂极度成熟稳定的 **`1920 × 1080 60p`**（`movie_size = 2`），彻底解决 60p 环形缓冲区超限（Buffer Overrun）导致的 1 秒自动停录，提供无限时长顺滑慢动作！
+>    - **`30p` 与 `24p`**：精准路由至专用超高码率 **`3072 × 1728 3K UHD`**（`movie_size = 3`），点对点采集 APS-C 极致画质与纯净暗部。
+> 2. **Movie SR 动画防抖复原原厂状态**：彻底恢复 `0x5365AAE4` 处的原厂指令（`rsbne r4, r6, r8, lsr #1`），配合精准的尺寸重映射，保留原厂标定阻尼与边缘稳定性。
+> 3. **全帧率回放画面撕裂花屏彻底根治**：Y 平面（5.31 MB）与 UV 平面（2.65 MB）严格数学对齐（总计 7.96 MB），完全消灭色度错位与对角撕裂！
+> 4. **直接激活 Socionext VPU 原生内置 3K 预设（res_id = 0x25）**：底层驱动零篡改，官方原生输出 192 × 108 宏块网格。
+> 5. **机内回放与 Apple iOS QuickTime 完美兼容**：严格遵循 Level 5.1（`0x33`）规范，即录即播！
 
 本项目为 **理光 Ricoh GR IV (Standard Edition / 中国大陆版 v1.20 `fwdc248b.bin`)** 的机内直录 **3K UHD (3072×1728) 视频** 固件修改项目。
 
@@ -28,13 +30,13 @@
 
 | 固件版本 | 刷机文件 | 编码器与封装格式 | 目标码率 | 核心特性说明 |
 | :--- | :--- | :--- | :--- | :--- |
-| **v1.5.1: 3K UHD 对称管线终极修复版**<br/>*(最新 & 强烈推荐)* | [`output/sd_card/fwdc248b.bin`](output/sd_card/fwdc248b.bin) | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 30p: 75~90 Mbps<br/>24p: 60~72 Mbps | • **零撕裂零花屏**：Y 平面（5.31 MB）与 UV 平面（2.65 MB）严格数学对齐，彻底消除色度偏移<br/>• **Socionext VPU 原生第 0x25 号预设**：直接激活硬件 3072×1728 宏块网格，底层驱动 100% 原厂原生<br/>• **机内流畅回放**：恢复官方 Level 5.1（`0x33`）规范，机内与 iOS 均丝滑硬解播放<br/>• **全新解耦管线架构**：取景 100% 沿用原厂 Plan 2 规划器，全帧率丝滑稳定不冻屏<br/>• **原生直录 `3072 × 1728` 点对点直出**（全画幅 28mm APS-C 零裁切）<br/>• **动画防抖几何对称修复**：左右平移零竖纹 |
-| **v1.5.0: 3K UHD 解耦架构探索版** | `releases/tag/v1.5.0` | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 30p: 75~90 Mbps<br/>24p: 60~72 Mbps | • 解耦管线概念验证<br/>• QuickTime 3072x1728 元数据注入 |
-| **v1.2.0: 4K H.264 标准版 (全幅零裁切)** | `releases/tag/v1.2.0` | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 30p: 75 Mbps avg<br/>24p: 60 Mbps avg | • 官方 v1.20 底层固件基准<br/>• 全画幅取景视野 (CIS Mode 3)<br/>• 4K 插值输出 (3840×2160)<br/>• 电子防抖旁路 |
+| **v1.5.2: 帧率解耦动态路由版**<br/>*(最新 & 强烈推荐)* | [`output/sd_card/fwdc248b.bin`](output/sd_card/fwdc248b.bin) | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 3K 30p: 75~90 Mbps<br/>3K 24p: 60~72 Mbps<br/>FHD 60p: 28~36 Mbps | • **帧率动态解耦**：30p/24p 录制 3K UHD；60p 走稳定 1080p 零掉帧不闪退<br/>• **Movie SR 官方复原**：100% 保持官方防抖数学模型<br/>• **零撕裂零花屏**：Y/UV 缓冲区完全对齐（5.31M + 2.65M = 7.96M）<br/>• **Socionext VPU 原生预设（res_id = 0x25）**<br/>• **机内流畅回放**（SPS Level 5.1）<br/>• **原生直录 `3072 × 1728` 点对点直出**（全画幅 28mm APS-C 零裁切） |
+| **v1.5.1: 3K UHD 对称管线修复版** | `releases/tag/v1.5.1` | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 30p: 75~90 Mbps<br/>24p: 60~72 Mbps | • 解决 Y/UV 内存错位导致的画面撕裂<br/>• 激活原生 VPU 0x25 预设 |
+| **v1.5.0: 3K UHD 解耦架构探索版** | `releases/tag/v1.5.0` | **H.264 / AVC**<br/>`avc1` / `avcC` (`.MOV`) | 30p: 75~90 Mbps<br/>24p: 60~72 Mbps | • 解耦管线概念验证 |
 
 ---
 
-## 🔬 v1.5.0 解耦架构技术原理
+## 🔬 解耦架构与帧率分发技术原理
 
 ```mermaid
 flowchart TD
@@ -43,31 +45,28 @@ flowchart TD
         Plan2 --> LVPrev["1080p 平滑预览<br/>24p / 30p / 60p 绝不冻屏"]
     end
 
-    subgraph MovieSetup ["录制触发解耦 (0x5365a6c0)"]
-        RecKey["按下录制键"] --> Hook["LiveViewMovieSetup<br/>• 注入 3072x1728 元数据<br/>• 写入 res_enum = 0"]
-        Hook --> Route3["MapResEnumToMovieSize(0)<br/>-> 专有通道 movie_size = 3"]
+    subgraph MovieSetup ["录制动态分发 (0x5365A878)"]
+        RecKey["按下录制键"] --> CheckFPS{"检测菜单帧率<br/>[r4, #0x12]"}
+        CheckFPS -- "60p (== 0)" --> RouteFHD["路由至 1080p 60p<br/>res_enum = 1 (movie_size = 2)<br/>Width=1920, Height=1080"]
+        CheckFPS -- "30p / 24p (!= 0)" --> Route3K["路由至 3K UHD<br/>res_enum = 0 (movie_size = 3)<br/>Width=3072, Height=1728"]
     end
 
     subgraph RecordPipeline ["3K 专用硬件录制通道 (movie_size = 3)"]
         MemPool["专有内存池 13.5 MB/Slot<br/>轻松容纳 7.59 MB 3K 帧"]
-        VPU["Socionext VPU 硬件自定义宏块 (0x530fbea4)<br/>192 x 108 MBs = 3072x1728 像素<br/>分配 20,736 个宏块 (0x5100)"]
-        Container[".MOV 3K UHD 容器<br/>SPS level_idc: Level 5.2 (0x34)<br/>iOS / 机内无损硬件解码"]
-        Route3 --> MemPool
-        Route3 --> VPU
+        VPU["Socionext VPU 原生第 0x25 号预设<br/>192 x 108 MBs = 3072x1728 像素<br/>分配 20,736 个宏块"]
+        Container[".MOV 3K UHD 容器<br/>SPS level_idc: Level 5.1 (0x33)<br/>iOS / 机内无损硬件解码"]
+        Route3K --> MemPool
+        Route3K --> VPU
         VPU --> Container
     end
+
+    subgraph StockFHD ["原厂 FHD 60p 录制通道 (movie_size = 2)"]
+        FHDMemPool["原厂 1080p 缓冲池<br/>官方槽位稳定分配"]
+        FHDStream[".MOV 1080p 60p 容器<br/>流畅持续录制 (绝不 1 秒停录)"]
+        RouteFHD --> FHDMemPool
+        FHDMemPool --> FHDStream
+    end
 ```
-
-### 1. v1.4.0 录制问题深度修复
-- **容器 1080p 回退修复**：在 `LiveViewMovieSetup`（`0x5365a718` & `0x5365a724`）处直接注入宽 3072、高 1728，并设置 `res_enum = 0`，确保 `.MOV` 文件头原生写入 3072 × 1728。
-- **画面破碎花屏修复**：将 VPU 硬件跳转表第 13 项重定向至自定义宏块配置（`0x530fbea4`），硬件行跨距精确匹配输入缓冲，彻底消灭逐行卷绕撕裂。
-- **缓冲池溢出修复**：激活 `movie_size = 3` 的 13.5 MB 专用内存槽，彻底消除 7.96 MB 3K 帧溢出相邻内存的问题。
-
-### 2. 硬件 ASIC 重采样说明
-从 CIS Mode 3 传感器原始尺寸（`3120 × 1755`）到最终输出（`3072 × 1728`）的 1.5% 微缩完全由 Socionext Milbeaut 的 **R2Y 内联硬件 ASIC 缩放器**在 DMA 传输中以硬线完成，**ARM CPU 占用率为 0%**，绝不增加机身运算负担或额外发热。
-
-### 3. 动画防抖 (Movie SR) 几何对称修复
-将原厂有缺陷的 `rsbne r4, r6, r8, lsr #1` 修改为 `subne r4, r8, r6, lsl #1`（`Active Width = Width - MarginX * 2`），水平轴与垂直轴计算实现 100% 几何对称，彻底解决快速横摇花屏！
 
 ---
 
@@ -82,4 +81,6 @@ flowchart TD
 2. 关机状态下插入 SD 卡。
 3. 按住相机 **`MENU`** 键不放，按下 **`POWER`** 电源键开机。
 4. 屏幕提示固件升级，按提示确认升级。
-5. 升级完成后相机重启，在动画模式下无论是 60p、30p 还是 24p，取景预览均丝般顺滑，按下录像键即可直录点对点原生 3K UHD 28mm 广角超清视频！
+5. 升级完成后相机重启，在动画模式下：
+   - 切换至 **`3K 30P`** 或 **`3K 24P`**：录制点对点原生 3K UHD（3072×1728）高画质视频！
+   - 切换至 **`60P`**：录制原汁原味流畅 1080p 60fps 慢动作，剩余录制时间准确，绝不 1 秒中断！

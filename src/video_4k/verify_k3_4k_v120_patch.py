@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-verify_k3_4k_v120_patch.py - Automated verification suite for Ricoh GR IV v1.20 3K UHD Video Mod (v1.5.1 Symmetrical Pipeline)
+verify_k3_4k_v120_patch.py - Automated verification suite for Ricoh GR IV v1.20 3K UHD Video Mod (v1.5.2 Decoupled Framerate Routing)
 
 Validates:
 1. Outer container and inner payload dual word_sum == 0x00000000.
@@ -9,11 +9,15 @@ Validates:
    - LiveViewDebug::IsDebug4KMovie (0x538ad500) == mov r0, #0; bx lr.
    - SetMovieResolution (0x538b376c) matches stock byte-for-byte.
    - LiveViewSequencePlanner Plan 0..2 jump table entries match stock.
-4. Movie SR Symmetrical Active Width bug fix (subne r4, r8, r6, lsl #1) @ 0x5365aae4.
-5. Decoupled Movie Setup:
-   - LiveViewMovieSetup width override @ 0x5365a718 == mov r0, #0xc00 (3072 px).
-   - LiveViewMovieSetup height override @ 0x5365a724 == mov r0, #0x6c0 (1728 px).
-   - LiveViewMovieSetup jump table entry 2 @ 0x5365a7f4 -> 0x5365a878 (res_enum = 0).
+4. Movie SR Active Width Formula preserved at 100% stock (rsbne r4, r6, r8, lsr #1) @ 0x5365aae4.
+5. Framerate-Decoupled Movie Setup:
+   - LiveViewMovieSetup width getter @ 0x5365a718 == stock bl 0x538b2db0.
+   - LiveViewMovieSetup height getter @ 0x5365a724 == stock bl 0x538b2dd8.
+   - LiveViewMovieSetup FPS branch guard @ 0x5365a7a8 == nop.
+   - LiveViewMovieSetup jump table entry 2 @ 0x5365a7f4 -> 0x5365a878.
+   - LiveViewMovieSetup dynamic dispatch @ 0x5365a878:
+     * 60p ([r4, #0x12] == 0) -> res_enum = 1 (FHD 1080p, stock 1920x1080).
+     * 30p/24p ([r4, #0x12] != 0) -> res_enum = 0 (3K UHD, writes 3072x1728).
    - Resolution tables 0x54008528 and 0x54008578 entry 0 == (3072, 1728).
 6. Dedicated High-Resolution Channel (movie_size = 3) & Zero-Shatter Y/UV Alignment:
    - WidthGetter1 slot 3 @ 0x538997e0 == moveq r0, #0xc00 (3072).
@@ -75,7 +79,7 @@ def verify_firmware_container(fw_path: Path, label: str) -> bytes:
 
 
 def run_tests() -> None:
-    print("=== Ricoh GR IV v1.20 3K UHD (3072x1728) Video Mod Verification Suite (v1.5.1) ===\n")
+    print("=== Ricoh GR IV v1.20 3K UHD (3072x1728) Video Mod Verification Suite (v1.5.2) ===\n")
     official_raw = OFFICIAL_FW_V120.read_bytes()
     official_payload, _, _ = decode_container(official_raw)
 
@@ -100,21 +104,45 @@ def run_tests() -> None:
     assert patched_payload[poff_seq : poff_seq + 12] == official_payload[poff_seq : poff_seq + 12]
     print("  [PASS] LiveView Stock: LiveViewSequencePlanner Plan 0..2 jump table untouched")
 
-    # 2. Movie SR Symmetrical Active Width bug fix
-    i_w = next(md.disasm(patched_payload[v2p(0x5365AAE4) : v2p(0x5365AAE8)], 0x5365AAE4))
-    assert i_w.mnemonic == "subne" and i_w.op_str == "r4, r8, r6, lsl #1"
-    print("  [PASS] Movie SR Active Width: subne r4, r8, r6, lsl #1 (symmetrical Width - MarginX * 2)")
+    # 2. Movie SR Active Width formula restored to 100% stock
+    poff_sr = v2p(0x5365AAE4)
+    assert patched_payload[poff_sr : poff_sr + 4] == official_payload[poff_sr : poff_sr + 4]
+    i_w = next(md.disasm(patched_payload[poff_sr : poff_sr + 4], 0x5365AAE4))
+    assert i_w.mnemonic == "rsbne" and i_w.op_str in ("r4, r6, r8, lsr #1", "r4, r6, r8, lsr 1")
+    print("  [PASS] Movie SR Active Width: rsbne r4, r6, r8, lsr #1 (100% stock formula)")
 
-    # 3. Decoupled Movie Recording at LiveViewMovieSetup
-    iw_setup = next(md.disasm(patched_payload[v2p(0x5365A718) : v2p(0x5365A71C)], 0x5365A718))
-    ih_setup = next(md.disasm(patched_payload[v2p(0x5365A724) : v2p(0x5365A728)], 0x5365A724))
-    assert iw_setup.mnemonic == "mov" and iw_setup.op_str in ("r0, #0xc00", "r0, #12, #24")
-    assert ih_setup.mnemonic == "mov" and ih_setup.op_str in ("r0, #0x6c0", "r0, #108, #28")
-    print("  [PASS] LiveViewMovieSetup Decouple: 0x5365a718 -> mov r0, #0xc00 (3072) & 0x5365a724 -> mov r0, #0x6c0 (1728)")
+    # 3. Framerate-Decoupled Dynamic Dispatch at LiveViewMovieSetup
+    # Stock getters at 0x5365a718 & 0x5365a724 untouched
+    poff_g1 = v2p(0x5365A718)
+    poff_g2 = v2p(0x5365A724)
+    assert patched_payload[poff_g1 : poff_g1 + 4] == official_payload[poff_g1 : poff_g1 + 4]
+    assert patched_payload[poff_g2 : poff_g2 + 4] == official_payload[poff_g2 : poff_g2 + 4]
+    print("  [PASS] LiveViewMovieSetup Getters: 0x5365a718 & 0x5365a724 match stock (default 1920x1080)")
 
+    # FPS branch guard @ 0x5365a7a8 == nop
+    i_guard = next(md.disasm(patched_payload[v2p(0x5365A7A8) : v2p(0x5365A7AC)], 0x5365A7A8))
+    assert i_guard.mnemonic == "mov" and i_guard.op_str == "r0, r0"
+    print("  [PASS] LiveViewMovieSetup FPS Branch Guard: 0x5365a7a8 == nop (prevents error assert)")
+
+    # Jump table entry 2 redirected to dispatch block
     jt_entry2 = struct.unpack("<I", patched_payload[v2p(0x5365A7F4) : v2p(0x5365A7F8)])[0]
     assert jt_entry2 == 0x5365A878, f"Jump table entry 2 mismatch: {jt_entry2:#x} != 0x5365a878"
-    print("  [PASS] LiveViewMovieSetup Jump Table: entry 2 -> 0x5365a878 (res_enum = 0)")
+    print("  [PASS] LiveViewMovieSetup Jump Table: entry 2 -> 0x5365a878 (dynamic dispatch block)")
+
+    # Verify dynamic dispatch instructions at 0x5365a878
+    dispatch_insns = list(md.disasm(patched_payload[v2p(0x5365A878) : v2p(0x5365A8A4)], 0x5365A878))
+    assert len(dispatch_insns) >= 10
+    assert dispatch_insns[0].mnemonic == "ldrb" and dispatch_insns[0].op_str == "r3, [r4, #0x12]"
+    assert dispatch_insns[1].mnemonic == "cmp" and dispatch_insns[1].op_str == "r3, #0"
+    assert dispatch_insns[2].mnemonic == "moveq" and dispatch_insns[2].op_str == "r3, #1"
+    assert dispatch_insns[3].mnemonic == "beq" and dispatch_insns[3].op_str == "#0x5365a82c"
+    assert dispatch_insns[4].mnemonic == "mov" and dispatch_insns[4].op_str in ("r0, #0xc00", "r0, #12, #24")
+    assert dispatch_insns[5].mnemonic == "strh" and dispatch_insns[5].op_str == "r0, [r4, #2]"
+    assert dispatch_insns[6].mnemonic == "mov" and dispatch_insns[6].op_str in ("r0, #0x6c0", "r0, #108, #28")
+    assert dispatch_insns[7].mnemonic == "strh" and dispatch_insns[7].op_str == "r0, [r4, #4]"
+    assert dispatch_insns[8].mnemonic == "mov" and dispatch_insns[8].op_str == "r3, #0"
+    assert dispatch_insns[9].mnemonic == "b" and dispatch_insns[9].op_str == "#0x5365a82c"
+    print("  [PASS] LiveViewMovieSetup Dynamic Dispatch Block: 60p->1080p (res_enum=1), 30p/24p->3K (res_enum=0)")
 
     tw0 = struct.unpack("<H", patched_payload[v2p(0x54008528) : v2p(0x5400852A)])[0]
     th0 = struct.unpack("<H", patched_payload[v2p(0x54008578) : v2p(0x5400857A)])[0]
@@ -218,7 +246,7 @@ def run_tests() -> None:
 
     diffs = diff_offsets(official_payload, patched_payload)
     print(f"\n[SUMMARY] Total modified payload bytes: {len(diffs)} bytes (including rezero checksum word)")
-    print("ALL v1.5.1 SYMMETRICAL 3K UHD VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
+    print("ALL v1.5.2 DECOUPLED 3K UHD / 1080P VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
 
 
 if __name__ == "__main__":
