@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-verify_k3_4k_v120_patch.py - Automated verification suite for Ricoh GR IV v1.20 3K UHD Video Mod (v1.5.3 Bitrate Optimized)
+verify_k3_4k_v120_patch.py - Automated verification suite for Ricoh GR IV v1.20 3K UHD Video Mod (v1.5.4 Rock-Solid 3K Pipeline)
 
 Validates:
 1. Outer container and inner payload dual word_sum == 0x00000000.
@@ -10,14 +10,12 @@ Validates:
    - SetMovieResolution (0x538b376c) matches stock byte-for-byte.
    - LiveViewSequencePlanner Plan 0..2 jump table entries match stock.
 4. Movie SR Active Width Formula preserved at 100% stock (rsbne r4, r6, r8, lsr #1) @ 0x5365aae4.
-5. Framerate-Decoupled Movie Setup:
-   - LiveViewMovieSetup width getter @ 0x5365a718 == stock bl 0x538b2db0.
-   - LiveViewMovieSetup height getter @ 0x5365a724 == stock bl 0x538b2dd8.
-   - LiveViewMovieSetup FPS branch guard @ 0x5365a7a8 == nop.
+5. High-Resolution 3K Direct Channel Setup at LiveViewMovieSetup (0x5365A6C0):
+   - LiveViewMovieSetup width override @ 0x5365a718 == mov r0, #0xc00 (3072 px).
+   - LiveViewMovieSetup height override @ 0x5365a724 == mov r0, #0x6c0 (1728 px).
+   - LiveViewMovieSetup FPS branch guard @ 0x5365a7a8 matches stock.
    - LiveViewMovieSetup jump table entry 2 @ 0x5365a7f4 -> 0x5365a878.
-   - LiveViewMovieSetup dynamic dispatch @ 0x5365a878:
-     * 60p ([r4, #0x12] == 0) -> res_enum = 1 (FHD 1080p, stock 1920x1080).
-     * 30p/24p ([r4, #0x12] != 0) -> res_enum = 0 (3K UHD, writes 3072x1728).
+   - LiveViewMovieSetup stock block @ 0x5365a878 untouched (mov r3, #0; b 0x5365a82c -> res_enum = 0).
    - Resolution tables 0x54008528 and 0x54008578 entry 0 == (3072, 1728).
 6. 3K Bitrate Optimization (MovieRecordTable Slots 5, 6, 7, 8):
    - Slots 5, 6, 7, 8 all scaled from 100/120 Mbps to 75 Mbps (0x047868c0).
@@ -35,11 +33,9 @@ Validates:
    - CodecUvSizeGetter slot 3 @ 0x53899000 == 0x00288000 (2,654,208 B).
    - CodecParamInit slot 3 block @ 0x5389959c == (Width=3072, Y=0x00510000, UV=0x00288000).
    - SPS level_idc 1 & 2 preserved at stock Level 5.1 (0x33) for in-camera & iOS QuickTime playback.
-8. Socionext Milbeaut Hardware VPU Native 3K Preset (res_id = 0x25):
-   - VPU Encode Resolution Table slot 3 @ 0x5400370f == 0x25.
-   - VPU Decode Resolution Table slot 3 @ 0x5400373b == 0x25.
-   - VPU JumpTable[0x0d] untouched stock (0x530fb774).
-   - VPU JumpTable[0x25] native preset points to 0x530fbea4 (192 MBs x 108 MBs).
+8. Socionext Milbeaut Hardware VPU 3K UHD Custom Macroblock Encoding:
+   - VPU jump table entry 0x0d @ 0x530fb404 -> 0x530fbea4 (custom MBs 192x108).
+   - VPU ResTable entry 0x0d MB alloc @ 0x530f0794 == mov r3, #0x5100 (20,736 MBs).
 9. Playback H.264 Resolution Checks:
    - PlaybackH264 check 1 @ 0x536e7c14 == cmp r0, #0xc00; cmpeq r1, #0x6c0.
    - PlaybackH264 check 2 @ 0x536e7cb4 == cmp r0, #0xc00; cmpeq r1, #0x6c0.
@@ -84,7 +80,7 @@ def verify_firmware_container(fw_path: Path, label: str) -> bytes:
 
 
 def run_tests() -> None:
-    print("=== Ricoh GR IV v1.20 3K UHD (3072x1728) Video Mod Verification Suite (v1.5.3) ===\n")
+    print("=== Ricoh GR IV v1.20 3K UHD (3072x1728) Video Mod Verification Suite (v1.5.4) ===\n")
     official_raw = OFFICIAL_FW_V120.read_bytes()
     official_payload, _, _ = decode_container(official_raw)
 
@@ -116,38 +112,28 @@ def run_tests() -> None:
     assert i_w.mnemonic == "rsbne" and i_w.op_str in ("r4, r6, r8, lsr #1", "r4, r6, r8, lsr 1")
     print("  [PASS] Movie SR Active Width: rsbne r4, r6, r8, lsr #1 (100% stock formula)")
 
-    # 3. Framerate-Decoupled Dynamic Dispatch at LiveViewMovieSetup
-    # Stock getters at 0x5365a718 & 0x5365a724 untouched
-    poff_g1 = v2p(0x5365A718)
-    poff_g2 = v2p(0x5365A724)
-    assert patched_payload[poff_g1 : poff_g1 + 4] == official_payload[poff_g1 : poff_g1 + 4]
-    assert patched_payload[poff_g2 : poff_g2 + 4] == official_payload[poff_g2 : poff_g2 + 4]
-    print("  [PASS] LiveViewMovieSetup Getters: 0x5365a718 & 0x5365a724 match stock (default 1920x1080)")
+    # 3. High-Resolution 3K Direct Channel Setup at LiveViewMovieSetup (0x5365A6C0)
+    # Width and height getter overrides directly inject 3072x1728
+    i_w_set = next(md.disasm(patched_payload[v2p(0x5365A718) : v2p(0x5365A71C)], 0x5365A718))
+    i_h_set = next(md.disasm(patched_payload[v2p(0x5365A724) : v2p(0x5365A728)], 0x5365A724))
+    assert i_w_set.mnemonic == "mov" and i_w_set.op_str in ("r0, #0xc00", "r0, #12, #24")
+    assert i_h_set.mnemonic == "mov" and i_h_set.op_str in ("r0, #0x6c0", "r0, #108, #28")
+    print("  [PASS] LiveViewMovieSetup Getters: 0x5365a718 -> mov r0, #0xc00 & 0x5365a724 -> mov r0, #0x6c0")
 
-    # FPS branch guard @ 0x5365a7a8 == nop
-    i_guard = next(md.disasm(patched_payload[v2p(0x5365A7A8) : v2p(0x5365A7AC)], 0x5365A7A8))
-    assert i_guard.mnemonic == "mov" and i_guard.op_str == "r0, r0"
-    print("  [PASS] LiveViewMovieSetup FPS Branch Guard: 0x5365a7a8 == nop (prevents error assert)")
+    # FPS branch guard @ 0x5365a7a8 matches stock
+    poff_guard = v2p(0x5365A7A8)
+    assert patched_payload[poff_guard : poff_guard + 4] == official_payload[poff_guard : poff_guard + 4]
+    print("  [PASS] LiveViewMovieSetup FPS Branch Guard: 0x5365a7a8 matches stock")
 
-    # Jump table entry 2 redirected to dispatch block
+    # Jump table entry 2 redirected to 0x5365a878 (which executes stock mov r3, #0; b 0x5365a82c)
     jt_entry2 = struct.unpack("<I", patched_payload[v2p(0x5365A7F4) : v2p(0x5365A7F8)])[0]
     assert jt_entry2 == 0x5365A878, f"Jump table entry 2 mismatch: {jt_entry2:#x} != 0x5365a878"
-    print("  [PASS] LiveViewMovieSetup Jump Table: entry 2 -> 0x5365a878 (dynamic dispatch block)")
+    print("  [PASS] LiveViewMovieSetup Jump Table: entry 2 -> 0x5365a878 (res_enum = 0 / 3K direct channel)")
 
-    # Verify dynamic dispatch instructions at 0x5365a878
-    dispatch_insns = list(md.disasm(patched_payload[v2p(0x5365A878) : v2p(0x5365A8A4)], 0x5365A878))
-    assert len(dispatch_insns) >= 10
-    assert dispatch_insns[0].mnemonic == "ldrb" and dispatch_insns[0].op_str == "r3, [r4, #0x12]"
-    assert dispatch_insns[1].mnemonic == "cmp" and dispatch_insns[1].op_str == "r3, #0"
-    assert dispatch_insns[2].mnemonic == "moveq" and dispatch_insns[2].op_str == "r3, #1"
-    assert dispatch_insns[3].mnemonic == "beq" and dispatch_insns[3].op_str == "#0x5365a82c"
-    assert dispatch_insns[4].mnemonic == "mov" and dispatch_insns[4].op_str in ("r0, #0xc00", "r0, #12, #24")
-    assert dispatch_insns[5].mnemonic == "strh" and dispatch_insns[5].op_str == "r0, [r4, #2]"
-    assert dispatch_insns[6].mnemonic == "mov" and dispatch_insns[6].op_str in ("r0, #0x6c0", "r0, #108, #28")
-    assert dispatch_insns[7].mnemonic == "strh" and dispatch_insns[7].op_str == "r0, [r4, #4]"
-    assert dispatch_insns[8].mnemonic == "mov" and dispatch_insns[8].op_str == "r3, #0"
-    assert dispatch_insns[9].mnemonic == "b" and dispatch_insns[9].op_str == "#0x5365a82c"
-    print("  [PASS] LiveViewMovieSetup Dynamic Dispatch Block: 60p->1080p (res_enum=1), 30p/24p->3K (res_enum=0)")
+    # Stock instructions at 0x5365a878..0x5365a8a4 untouched
+    poff_disp = v2p(0x5365A878)
+    assert patched_payload[poff_disp : poff_disp + 44] == official_payload[poff_disp : poff_disp + 44]
+    print("  [PASS] LiveViewMovieSetup Stock Block @ 0x5365a878 untouched (mov r3, #0; b 0x5365a82c)")
 
     tw0 = struct.unpack("<H", patched_payload[v2p(0x54008528) : v2p(0x5400852A)])[0]
     th0 = struct.unpack("<H", patched_payload[v2p(0x54008578) : v2p(0x5400857A)])[0]
@@ -198,20 +184,14 @@ def run_tests() -> None:
     assert isps2.mnemonic == "mov" and isps2.op_str in ("r0, #0x33", "r0, #51")
     print("  [PASS] SPS level_idc: Stock Level 5.1 (0x33) preserved for in-camera & iOS playback compatibility")
 
-    # 5. Socionext Milbeaut Hardware VPU Native 3K Preset (res_id = 0x25)
-    enc_slot3 = patched_payload[v2p(0x5400370F)]
-    dec_slot3 = patched_payload[v2p(0x5400373B)]
-    assert enc_slot3 == 0x25, f"Encode table slot 3 mismatch: {enc_slot3:#x} != 0x25"
-    assert dec_slot3 == 0x25, f"Decode table slot 3 mismatch: {dec_slot3:#x} != 0x25"
-    print("  [PASS] VPU Resolution Tables: Encode & Decode slot 3 activate native preset 0x25 (37)")
+    # 5. Socionext Milbeaut Hardware VPU 3K UHD Custom Macroblock Encoding
+    vpu_target_0d = struct.unpack("<I", patched_payload[v2p(0x530FB404) : v2p(0x530FB408)])[0]
+    assert vpu_target_0d == 0x530FBEA4, f"VPU jump table entry 0x0d mismatch: {vpu_target_0d:#x} != 0x530fbea4"
+    print("  [PASS] VPU Hardware: JumpTable[0x0d] redirected to 0x530fbea4 (custom MBs 192x108)")
 
-    vpu_stock_0d = struct.unpack("<I", patched_payload[v2p(0x530FB404) : v2p(0x530FB408)])[0]
-    assert vpu_stock_0d == 0x530FB774, f"VPU jump table entry 0x0d not stock: {vpu_stock_0d:#x}"
-    print("  [PASS] VPU Hardware: JumpTable[0x0d] untouched stock (clean low-level driver)")
-
-    vpu_target_25 = struct.unpack("<I", patched_payload[v2p(0x530FB464) : v2p(0x530FB468)])[0]
-    assert vpu_target_25 == 0x530FBEA4, f"VPU JumpTable[0x25] mismatch: {vpu_target_25:#x}"
-    print("  [PASS] VPU Hardware: Native Preset 0x25 points to 0x530fbea4 (192 MBs x 108 MBs)")
+    i_vpu_mb = next(md.disasm(patched_payload[v2p(0x530F0794) : v2p(0x530F0798)], 0x530F0794))
+    assert i_vpu_mb.mnemonic == "mov" and i_vpu_mb.op_str in ("r3, #0x5100", "r3, #81, #24")
+    print("  [PASS] VPU Hardware: VPU ResTable entry 0x0d macroblock alloc = 0x5100 (20,736 MBs)")
 
     # 6. Playback H.264 Resolution Checks
     p_chk1 = list(md.disasm(patched_payload[v2p(0x536E7C14) : v2p(0x536E7C1C)], 0x536E7C14))
@@ -277,7 +257,7 @@ def run_tests() -> None:
 
     diffs = diff_offsets(official_payload, patched_payload)
     print(f"\n[SUMMARY] Total modified payload bytes: {len(diffs)} bytes (including rezero checksum word)")
-    print("ALL v1.5.3 BITRATE-OPTIMIZED 3K UHD / 1080P VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
+    print("ALL v1.5.4 ROCK-SOLID 3K DIRECT PIPELINE VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
 
 
 if __name__ == "__main__":

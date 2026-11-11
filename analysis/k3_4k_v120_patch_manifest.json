@@ -1,7 +1,7 @@
 {
-  "schema_version": 8,
+  "schema_version": 9,
   "codec": "h264",
-  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.3 Bitrate Optimized 48M@30p / 38M@24p + 1080@60p)",
+  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.4 Rock-Solid 3K Direct Pipeline & Zero-Shatter Alignment)",
   "target": {
     "model": "GR IV Standard Edition",
     "firmware_version": "1.20",
@@ -10,31 +10,31 @@
   },
   "changes": [
     {
-      "id": "liveview_movie_setup_fps_guard",
-      "description": "LiveViewMovieSetup FPS branch guard (0x5365a7a8): bne 0x5365a880 -> nop",
-      "vaddr": "0x5365a7a8",
-      "offset": "0x6724d0",
-      "expected_hex": "3400001a",
-      "replacement_hex": "0000a0e1",
+      "id": "liveview_movie_setup_width",
+      "description": "LiveViewMovieSetup width override (0x5365a718): mov r0, #0xc00 (3072 px)",
+      "vaddr": "0x5365a718",
+      "offset": "0x672440",
+      "expected_hex": "a46109eb",
+      "replacement_hex": "0c0ca0e3",
+      "length": 4
+    },
+    {
+      "id": "liveview_movie_setup_height",
+      "description": "LiveViewMovieSetup height override (0x5365a724): mov r0, #0x6c0 (1728 px)",
+      "vaddr": "0x5365a724",
+      "offset": "0x67244c",
+      "expected_hex": "ab6109eb",
+      "replacement_hex": "6c0ea0e3",
       "length": 4
     },
     {
       "id": "liveview_movie_setup_res_enum_jump",
-      "description": "LiveViewMovieSetup jump table entry 2 (0x5365a7f4): redirect to 0x5365a878 (dispatch)",
+      "description": "LiveViewMovieSetup jump table entry 2 (0x5365a7f4): redirect to 0x5365a878 (res_enum = 0)",
       "vaddr": "0x5365a7f4",
       "offset": "0x67251c",
       "expected_hex": "28a86553",
       "replacement_hex": "78a86553",
       "length": 4
-    },
-    {
-      "id": "liveview_movie_setup_framerate_dispatch",
-      "description": "LiveViewMovieSetup framerate dispatch (0x5365a878): 60p->FHD (res_enum=1), 30p/24p->3K (res_enum=0)",
-      "vaddr": "0x5365a878",
-      "offset": "0x6725a0",
-      "expected_hex": "0030a0e3eaffffea00708de5e0130de36c2d04e3001445e3ee2345e30000a0e35c3002e315eb0aebc1ffffea",
-      "replacement_hex": "1230d4e5000053e30130a003e8ffff0a0c0ca0e3b200c4e11b0da0e3b400c4e10030a0e3e2ffffea0000a0e1",
-      "length": 44
     },
     {
       "id": "table_54008528_width_0",
@@ -136,22 +136,22 @@
       "length": 24
     },
     {
-      "id": "vpu_table_encode_slot3",
-      "description": "VPU Encode Resolution Table slot 3 (0x5400370f): preset 0x0d -> 0x25 (3072x1728 native)",
-      "vaddr": "0x5400370f",
-      "offset": "0x101b437",
-      "expected_hex": "0d",
-      "replacement_hex": "25",
-      "length": 1
+      "id": "vpu_jump_table_entry_0d",
+      "description": "VPU jump table entry 0x0d (0x530fb404): redirect 0x530fb774 -> 0x530fbea4 (custom MBs 192x108)",
+      "vaddr": "0x530fb404",
+      "offset": "0x11312c",
+      "expected_hex": "74b70f53",
+      "replacement_hex": "a4be0f53",
+      "length": 4
     },
     {
-      "id": "vpu_table_decode_slot3",
-      "description": "VPU Decode Resolution Table slot 3 (0x5400373b): preset 0x0d -> 0x25 (3072x1728 native)",
-      "vaddr": "0x5400373b",
-      "offset": "0x101b463",
-      "expected_hex": "0d",
-      "replacement_hex": "25",
-      "length": 1
+      "id": "vpu_res_table_0d_mb_alloc",
+      "description": "VPU ResTable entry 0x0d macroblock alloc (0x530f0794): mov r3, #0x5100 (20,736 MBs)",
+      "vaddr": "0x530f0794",
+      "offset": "0x1084bc",
+      "expected_hex": "903e07e3",
+      "replacement_hex": "513ca0e3",
+      "length": 4
     },
     {
       "id": "playback_h264_res_check_1",
