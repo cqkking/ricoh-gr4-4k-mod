@@ -80,7 +80,7 @@ def verify_firmware_container(fw_path: Path, label: str) -> bytes:
 
 
 def run_tests() -> None:
-    print("=== Ricoh GR IV v1.20 3K UHD (3072x1728) Video Mod Verification Suite (v1.5.4) ===\n")
+    print("=== Ricoh GR IV v1.20 3K UHD (3072x1728) Video Mod Verification Suite (v1.5.5) ===\n")
     official_raw = OFFICIAL_FW_V120.read_bytes()
     official_payload, _, _ = decode_container(official_raw)
 
@@ -90,16 +90,37 @@ def run_tests() -> None:
     print("[*] Validating Patched Firmware Binary:")
     patched_payload = verify_firmware_container(FW_V120_4K, "v1.20 3K UHD H.264")
 
-    # 1. LiveView Stock Untouched Invariants
+    # 1. LiveView Stock Invariants & Sensor Optical Readout Mode
     insns_dbg = list(md.disasm(patched_payload[v2p(0x538AD500) : v2p(0x538AD500) + 8], 0x538AD500))
     assert len(insns_dbg) == 2
     assert insns_dbg[0].mnemonic == "mov" and insns_dbg[0].op_str == "r0, #0"
     assert insns_dbg[1].mnemonic == "bx" and insns_dbg[1].op_str == "lr"
     print("  [PASS] LiveView Stock: IsDebug4KMovie (0x538ad500) == mov r0, #0; bx lr (100% stock)")
 
-    poff_res = v2p(0x538B376C)
-    assert patched_payload[poff_res : poff_res + 32] == official_payload[poff_res : poff_res + 32]
-    print("  [PASS] LiveView Stock: SetMovieResolution (0x538b376c) matches stock (offset +9 == 2)")
+    # SelectSensorDriveMode 30p & 24p: returns DriveMode 5 (30p) and DriveMode 6 (24p) -> CIS Mode 0x12
+    i_dm30 = list(md.disasm(patched_payload[v2p(0x5365693C) : v2p(0x53656944)], 0x5365693C))
+    assert i_dm30[0].mnemonic == "mov" and i_dm30[0].op_str == "r0, #5"
+    assert i_dm30[1].mnemonic in ("nop", "mov")
+    print("  [PASS] Sensor DriveMode 30p: 0x5365693c -> mov r0, #5 (DriveMode 5 / CIS Mode 0x12 4K 30p)")
+
+    i_dm24 = list(md.disasm(patched_payload[v2p(0x53656A28) : v2p(0x53656A30)], 0x53656A28))
+    assert i_dm24[0].mnemonic == "mov" and i_dm24[0].op_str == "r0, #6"
+    assert i_dm24[1].mnemonic in ("nop", "mov")
+    print("  [PASS] Sensor DriveMode 24p: 0x53656a28 -> mov r0, #6 (DriveMode 6 / CIS Mode 0x12 4K 24p)")
+
+    # LiveViewControl::UpdateMovieConfig scaler dispatch
+    i_lvc_j = next(md.disasm(patched_payload[v2p(0x53652DE0) : v2p(0x53652DE4)], 0x53652DE0))
+    assert i_lvc_j.mnemonic == "b" and i_lvc_j.op_str in ("#0x53652e64", "0x53652e64")
+    i_lvc_d = list(md.disasm(patched_payload[v2p(0x53652E70) : v2p(0x53652E7C)], 0x53652E70))
+    assert i_lvc_d[0].mnemonic == "cmp" and i_lvc_d[0].op_str == "r0, #0"
+    assert i_lvc_d[1].mnemonic == "mov" and i_lvc_d[1].op_str == "r5, #1"
+    assert i_lvc_d[2].mnemonic == "beq" and i_lvc_d[2].op_str in ("#0x53652de4", "0x53652de4")
+    print("  [PASS] LiveViewControl Scaler: 0x53652de0 -> b #0x53652e64 & 0x53652e70 -> 4K downscaler dispatch")
+
+    # SetMovieResolution jump
+    i_smr = next(md.disasm(patched_payload[v2p(0x538B3790) : v2p(0x538B3794)], 0x538B3790))
+    assert i_smr.mnemonic == "b" and i_smr.op_str in ("#0x538b37a4", "0x538b37a4")
+    print("  [PASS] SetMovieResolution Jump: 0x538b3790 -> b #0x538b37a4 ([r4, #9] = 1 for 4K)")
 
     poff_seq = v2p(0x5366E170)
     assert patched_payload[poff_seq : poff_seq + 12] == official_payload[poff_seq : poff_seq + 12]
@@ -214,19 +235,25 @@ def run_tests() -> None:
     assert (w_d2a, h_d2a, w_d2b, h_d2b) == (3072, 1728, 3072, 1728), f"Display table 2 mismatch: {(w_d2a, h_d2a)}"
     print("  [PASS] Static Tables: 3072x1728 configured in 32-bit, 16-bit, and display tables")
 
-    # 8. MovieRecordTable 3K Bitrate Optimization (75 Mbps Base -> ~48M@30p / ~38M@24p)
-    br_slots = [
+    # 8. MovieRecordTable 3K Bitrate Calibration (48 Mbps @ 30p / 38 Mbps @ 24p)
+    br_slots_30p = [
         (0x54397A18, "Slot 5 Bitrate 1"),
         (0x54397BE8, "Slot 6 Bitrate 1"),
+    ]
+    for va, name in br_slots_30p:
+        br_val = struct.unpack("<I", patched_payload[v2p(va) : v2p(va) + 4])[0]
+        assert br_val == 48000000, f"{name} @ {va:#x}: {br_val} != 48,000,000"
+
+    br_slots_24p = [
         (0x54397DB8, "Slot 7 Bitrate 1"),
         (0x54397DD4, "Slot 7 Bitrate 2"),
         (0x54397F88, "Slot 8 Bitrate 1"),
         (0x54397FA4, "Slot 8 Bitrate 2"),
     ]
-    for va, name in br_slots:
+    for va, name in br_slots_24p:
         br_val = struct.unpack("<I", patched_payload[v2p(va) : v2p(va) + 4])[0]
-        assert br_val == 75000000, f"{name} @ {va:#x}: {br_val} != 75,000,000"
-    print("  [PASS] MovieRecordTable 3K Bitrates: Slots 5, 6, 7, 8 all scaled to 75 Mbps (48M@30p / 38M@24p)")
+        assert br_val == 38000000, f"{name} @ {va:#x}: {br_val} != 38,000,000"
+    print("  [PASS] MovieRecordTable 3K Bitrates: 48 Mbps @ 30p (Slots 5, 6) & 38 Mbps @ 24p (Slots 7, 8)")
 
     # 9. Stock 1080p 60p Bitrate Invariants (Slots 11, 12, 13, 14 Untouched)
     fhd_slots = [
@@ -257,7 +284,7 @@ def run_tests() -> None:
 
     diffs = diff_offsets(official_payload, patched_payload)
     print(f"\n[SUMMARY] Total modified payload bytes: {len(diffs)} bytes (including rezero checksum word)")
-    print("ALL v1.5.4 ROCK-SOLID 3K DIRECT PIPELINE VERIFICATION CHECKS PASSED SUCCESSFULLY!\n")
+    print("ALL v1.5.5 TRUE OPTICAL READOUT & BITRATE CALIBRATION CHECKS PASSED SUCCESSFULLY!\n")
 
 
 if __name__ == "__main__":

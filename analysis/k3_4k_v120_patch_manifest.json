@@ -1,7 +1,7 @@
 {
-  "schema_version": 9,
+  "schema_version": 10,
   "codec": "h264",
-  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.4 Rock-Solid 3K Direct Pipeline & Zero-Shatter Alignment)",
+  "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.5 True Optical Readout & Bitrate Calibration)",
   "target": {
     "model": "GR IV Standard Edition",
     "firmware_version": "1.20",
@@ -53,6 +53,51 @@
       "expected_hex": "7008",
       "replacement_hex": "c006",
       "length": 2
+    },
+    {
+      "id": "sensor_drive_mode_30p",
+      "description": "SelectSensorDriveMode 30p (0x5365693c): mov r0, #5 (DriveMode 5 / CIS Mode 0x12 4K) + nop",
+      "vaddr": "0x5365693c",
+      "offset": "0x66e664",
+      "expected_hex": "0200a0030500a013",
+      "replacement_hex": "0500a0e30000a0e1",
+      "length": 8
+    },
+    {
+      "id": "sensor_drive_mode_24p",
+      "description": "SelectSensorDriveMode 24p (0x53656a28): mov r0, #6 (DriveMode 6 / CIS Mode 0x12 4K) + nop",
+      "vaddr": "0x53656a28",
+      "offset": "0x66e750",
+      "expected_hex": "0300a0030600a013",
+      "replacement_hex": "0600a0e30000a0e1",
+      "length": 8
+    },
+    {
+      "id": "lvc_movie_config_jump",
+      "description": "LiveViewControl::UpdateMovieConfig jump (0x53652de0): b #0x53652e64",
+      "vaddr": "0x53652de0",
+      "offset": "0x66ab08",
+      "expected_hex": "1f00001a",
+      "replacement_hex": "1f0000ea",
+      "length": 4
+    },
+    {
+      "id": "lvc_movie_config_dispatch",
+      "description": "LiveViewControl::UpdateMovieConfig dispatch (0x53652e70): cmp r0, #0; mov r5, #1; beq #0x53652de4",
+      "vaddr": "0x53652e70",
+      "offset": "0x66ab98",
+      "expected_hex": "010050e30050a0e1d9ffff1a",
+      "replacement_hex": "000050e30150a0e3d9ffff0a",
+      "length": 12
+    },
+    {
+      "id": "set_movie_res_jump",
+      "description": "LiveViewResolutionManager::SetMovieResolution jump (0x538b3790): b #0x538b37a4",
+      "vaddr": "0x538b3790",
+      "offset": "0x8cb4b8",
+      "expected_hex": "0300001a",
+      "replacement_hex": "030000ea",
+      "length": 4
     },
     {
       "id": "slot3_width_getter_1",
@@ -209,56 +254,56 @@
     },
     {
       "id": "table_movie_record_slot5_bitrate1",
-      "description": "MovieRecordTable Slot 5 Bitrate 1 (0x54397a18): 120 Mbps (0x07270e00) -> 75 Mbps (0x047868c0)",
+      "description": "MovieRecordTable Slot 5 Bitrate 1 (0x54397a18): 120 Mbps (0x07270e00) -> 48 Mbps (0x02dc6c00)",
       "vaddr": "0x54397a18",
       "offset": "0x13af740",
       "expected_hex": "000e2707",
-      "replacement_hex": "c0687804",
+      "replacement_hex": "006cdc02",
       "length": 4
     },
     {
       "id": "table_movie_record_slot6_bitrate1",
-      "description": "MovieRecordTable Slot 6 Bitrate 1 (0x54397be8): 120 Mbps (0x07270e00) -> 75 Mbps (0x047868c0)",
+      "description": "MovieRecordTable Slot 6 Bitrate 1 (0x54397be8): 120 Mbps (0x07270e00) -> 48 Mbps (0x02dc6c00)",
       "vaddr": "0x54397be8",
       "offset": "0x13af910",
       "expected_hex": "000e2707",
-      "replacement_hex": "c0687804",
+      "replacement_hex": "006cdc02",
       "length": 4
     },
     {
       "id": "table_movie_record_slot7_bitrate1",
-      "description": "MovieRecordTable Slot 7 Bitrate 1 (0x54397db8): 100 Mbps (0x05f5e100) -> 75 Mbps (0x047868c0)",
+      "description": "MovieRecordTable Slot 7 Bitrate 1 (0x54397db8): 100 Mbps (0x05f5e100) -> 38 Mbps (0x0243d580)",
       "vaddr": "0x54397db8",
       "offset": "0x13afae0",
       "expected_hex": "00e1f505",
-      "replacement_hex": "c0687804",
+      "replacement_hex": "80d54302",
       "length": 4
     },
     {
       "id": "table_movie_record_slot7_bitrate2",
-      "description": "MovieRecordTable Slot 7 Bitrate 2 (0x54397dd4): 100 Mbps (0x05f5e100) -> 75 Mbps (0x047868c0)",
+      "description": "MovieRecordTable Slot 7 Bitrate 2 (0x54397dd4): 100 Mbps (0x05f5e100) -> 38 Mbps (0x0243d580)",
       "vaddr": "0x54397dd4",
       "offset": "0x13afafc",
       "expected_hex": "00e1f505",
-      "replacement_hex": "c0687804",
+      "replacement_hex": "80d54302",
       "length": 4
     },
     {
       "id": "table_movie_record_slot8_bitrate1",
-      "description": "MovieRecordTable Slot 8 Bitrate 1 (0x54397f88): 120 Mbps (0x07270e00) -> 75 Mbps (0x047868c0)",
+      "description": "MovieRecordTable Slot 8 Bitrate 1 (0x54397f88): 120 Mbps (0x07270e00) -> 38 Mbps (0x0243d580)",
       "vaddr": "0x54397f88",
       "offset": "0x13afcb0",
       "expected_hex": "000e2707",
-      "replacement_hex": "c0687804",
+      "replacement_hex": "80d54302",
       "length": 4
     },
     {
       "id": "table_movie_record_slot8_bitrate2",
-      "description": "MovieRecordTable Slot 8 Bitrate 2 (0x54397fa4): 120 Mbps (0x07270e00) -> 75 Mbps (0x047868c0)",
+      "description": "MovieRecordTable Slot 8 Bitrate 2 (0x54397fa4): 120 Mbps (0x07270e00) -> 38 Mbps (0x0243d580)",
       "vaddr": "0x54397fa4",
       "offset": "0x13afccc",
       "expected_hex": "000e2707",
-      "replacement_hex": "c0687804",
+      "replacement_hex": "80d54302",
       "length": 4
     }
   ]
