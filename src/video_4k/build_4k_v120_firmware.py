@@ -1,42 +1,39 @@
 #!/usr/bin/env python3
 """
-build_4k_v120_firmware.py - Build Ricoh GR IV v1.20 Flashable 3K UHD Video Mod (v1.5.5 True Optical Readout & Bitrate Calibration)
+build_4k_v120_firmware.py - Build Ricoh GR IV v1.20 Flashable 3K UHD Video Mod (v1.5.6 Full-Width 28mm Direct 3K & Genuine Bitrate Reduction)
 
-Core Architecture of v1.5.5 (True Optical 3K Readout + ISP Downsampling + Calibrated Bitrate):
-1. True Optical High-Resolution Sensor Readout (SelectSensorDriveMode 0x536568d4):
-   - 30p (0x5365693c): mov r0, #5 (DriveMode 5) + nop. Direct mapping to CIS Mode 0x12 (IMX571 3840x2160, PCLK 297 MHz).
-   - 24p (0x53656a28): mov r0, #6 (DriveMode 6) + nop. Direct mapping to CIS Mode 0x12 (IMX571 3840x2160, PCLK 297 MHz).
-   - 60p (r4 < 1): Unchanged stock, returns DriveMode 4 (CIS Mode 3, 1080p 60fps).
-   - Preview Standby (r1 == 0): Unchanged stock, branches to 0x5365694c (returns DriveMode 9 / CIS Mode 2, 1080p 60fps).
-   - 100% silky smooth preview with ZERO preview freezes, while recording captures true point-to-point sensor detail!
-2. True Downsampling ISP Scaler (LiveViewControl::UpdateMovieConfig 0x53652dc0):
+Core Architecture of v1.5.6 (Full-Width 28mm CIS Mode 3 + Direct 3K ISP Scaling + Calibrated Bitrate):
+1. Stock Full-Width 28mm Equivalent Sensor Readout (SelectSensorDriveMode 0x536568d4 unpatched):
+   - Uses stock DriveMode 4 / CIS Mode 3 (full-width readout, zero FOV crop).
+   - Preview Standby: Unchanged stock DriveMode 9 (CIS Mode 2, 1080p 60fps preview).
+2. Direct B2R-to-3K Hardware ISP Scaling (LiveViewControl::UpdateMovieConfig 0x53652dc0 & SetMovieResolution 0x538b376c):
    - 0x53652de0: b #0x53652e64 to always evaluate framerate dispatch.
    - 0x53652e70: cmp r0, #0; mov r5, #1; beq #0x53652de4.
-   - Configures hardware ISP B2R/R2Y downsampling from 3840 down to 3072 for 24p/30p, completely ending 1080p upscaling!
-3. Movie Resolution Manager Dispatch (SetMovieResolution 0x538b3790):
-   - 0x538b3790: b #0x538b37a4. Sets [r4, #9] = 1 (4K mode) for 24p/30p and [r4, #9] = 2 (1080p mode) for 60p.
-4. Calibrated Differentiated Bitrate (MovieRecordTable Slots 5, 6, 7, 8):
-   - 30p (Slots 5 & 6): 48,000,000 bps (48 Mbps, ~6 MB/s, 10s ~ 60 MB).
-   - 24p (Slots 7 & 8): 38,000,000 bps (38 Mbps, ~4.75 MB/s, 10s ~ 47.5 MB).
-   - Solves the ~95 MB bitrate inflation and restores accurate differentiated remaining recording time display!
-5. Proven 3K UHD Direct Pipeline at LiveViewMovieSetup (0x5365a6c0):
+   - 0x538b3790: b #0x538b37a4 to set [r4, #9] = 1 (4K/3K mode) for 24p/30p and [r4, #9] = 2 (1080p) for 60p.
+   - Ensures GetMaxVramSizeH/V (0x538b2db0/dd8) return 3072x1728 so SetupResizeProcessConfig (0x53717ee4) scales directly from the full-width B2R buffer into the 3K Movie YUV ring buffer in one pass.
+3. Genuine H.264 Encoder & OSD Bitrate Calibration (0x538b47d4 / 0x538b48b4):
+   - 0x538b488c & 0x538b4894: Base target bitrate changed from 75,000 kbps (0x000124f8) to 40,000 kbps (0x00009c40).
+   - 30p: Target = 40 Mbps (40,000 kbps), Max = 48 Mbps (48,000 kbps).
+   - 24p: Target = 32 Mbps (32,000 kbps), Max = 38.4 Mbps (38,400 kbps).
+   - Automatically updates both the H.264 hardware encoder rate controller and standby OSD remaining recording time display.
+4. Proven 3K UHD Direct Pipeline at LiveViewMovieSetup (0x5365a6c0):
    - Overrides width getter call at 0x5365a718 with mov r0, #0xc00 (3072).
    - Overrides height getter call at 0x5365a724 with mov r0, #0x6c0 (1728).
    - Reroutes jump table entry 2 at 0x5365a7f4 to 0x5365a878 (mov r3, #0), writing res_enum = 0 (movie_size = 3).
-6. Perfectly Aligned Y/UV Plane Strides & Offsets (Zero-Shatter Fix):
+5. Perfectly Aligned Y/UV Plane Strides & Offsets (Zero-Shatter Fix):
    - CodecWidthGetter returns 3072 px (0x0c00).
    - CodecYSizeGetter returns exactly 5,308,416 B (0x00510000 = 3072 x 1728 Y plane).
    - CodecUvSizeGetter returns exactly 2,654,208 B (0x00288000 = half of Y plane).
    - Total YUV frame size = 0x00510000 + 0x00288000 = 0x00798000 (100% bitwise consistent).
-7. Socionext Milbeaut Hardware VPU 3K UHD Custom Macroblock Encoding:
+6. Socionext Milbeaut Hardware VPU 3K UHD Custom Macroblock Encoding:
    - Reroutes VPU jump table entry 0x0d at 0x530fb404 to native 192 MBs x 108 MBs handler (0x530fbea4).
    - Updates VPU_ResTable macroblock allocation at 0x530f0794 to 20,736 MBs (0x5100).
-8. Flawless In-Camera & iOS Playback:
+7. Flawless In-Camera & iOS Playback:
    - SPS level_idc preserved at stock Level 5.1 (0x33) for in-camera decoder compatibility.
    - PlaybackH264 resolution checks updated to 3072x1728.
-9. Stock Movie SR Formula (0x5365aae4):
+8. Stock Movie SR Formula (0x5365aae4):
    - Preserves stock rsbne r4, r6, r8, lsr #1 for factory Movie SR calculation.
-10. Container dual 32-bit checksum balance (word_sum == 0x00000000) & LZSS round-trip integrity.
+9. Container dual 32-bit checksum balance (word_sum == 0x00000000) & LZSS round-trip integrity.
 """
 
 import json
@@ -163,38 +160,14 @@ def generate_patch_spec_v120(official_payload: bytes) -> dict:
     )
 
     # -------------------------------------------------------------------------
-    # 2. True Optical High-Resolution Sensor Readout (CIS Mode 0x12) & ISP Scaler
-    # - SelectSensorDriveMode (0x536568d4):
-    #   * 30p (0x5365693c): mov r0, #5 (DriveMode 5) + nop. Direct mapping to CIS Mode 0x12 (3840x2160, 297MHz).
-    #   * 24p (0x53656a28): mov r0, #6 (DriveMode 6) + nop. Direct mapping to CIS Mode 0x12 (3840x2160, 297MHz).
-    #   * 60p: Kept at stock DriveMode 4 (CIS Mode 3, 1080p 60fps).
-    #   * Preview Standby: Kept at stock DriveMode 9 (CIS Mode 2, 1080p 60fps preview).
+    # 2. Full-Width 28mm CIS Mode 3 (Stock SelectSensorDriveMode) & Direct 3K ISP Scaler
+    # - SelectSensorDriveMode (0x536568d4) stays stock (CIS Mode 3 full-width readout, zero FOV crop).
     # - LiveViewControl::UpdateMovieConfig (0x53652dc0):
     #   * 0x53652de0: b #0x53652e64 to always evaluate framerate dispatch.
-    #   * 0x53652e70: cmp r0, #0; mov r5, #1; beq #0x53652de4 to enable 4K downscaler for 24p/30p.
+    #   * 0x53652e70: cmp r0, #0; mov r5, #1; beq #0x53652de4 to enable 4K/3K channel dispatch for 24p/30p.
     # - LiveViewResolutionManager::SetMovieResolution (0x538b376c):
-    #   * 0x538b3790: b #0x538b37a4 to set [r4, #9] = 1 (4K mode) for 24p/30p and [r4, #9] = 2 (1080p) for 60p.
+    #   * 0x538b3790: b #0x538b37a4 to set [r4, #9] = 1 (4K/3K mode) for 24p/30p and [r4, #9] = 2 (1080p) for 60p.
     # -------------------------------------------------------------------------
-    add_patch(
-        changes,
-        official_payload,
-        "sensor_drive_mode_30p",
-        "SelectSensorDriveMode 30p (0x5365693c): mov r0, #5 (DriveMode 5 / CIS Mode 0x12 4K) + nop",
-        0x5365693C,
-        "0200a0030500a013",
-        bytes.fromhex("0500a0e30000a0e1"),
-    )
-
-    add_patch(
-        changes,
-        official_payload,
-        "sensor_drive_mode_24p",
-        "SelectSensorDriveMode 24p (0x53656a28): mov r0, #6 (DriveMode 6 / CIS Mode 0x12 4K) + nop",
-        0x53656A28,
-        "0300a0030600a013",
-        bytes.fromhex("0600a0e30000a0e1"),
-    )
-
     add_patch(
         changes,
         official_payload,
@@ -410,77 +383,37 @@ def generate_patch_spec_v120(official_payload: bytes) -> dict:
     )
 
     # -------------------------------------------------------------------------
-    # 7. MovieRecordTable 3K Bitrate Calibration (48 Mbps @ 30p / 38 Mbps @ 24p)
-    # Calibrates bitrate in slots 5, 6, 7, 8:
-    # - 30p (Slots 5 & 6): 48,000,000 bps (48 Mbps, ~6.0 MB/s, 10s ~ 60 MB).
-    # - 24p (Slots 7 & 8): 38,000,000 bps (38 Mbps, ~4.75 MB/s, 10s ~ 47.5 MB).
-    # Solves the ~95 MB bitrate inflation and restores accurate differentiated remaining recording time display!
-    # Slots 11-14 (1080p 60p) remain 100% factory untouched at stock bitrate (~28-36 Mbps).
+    # 7. Genuine H.264 Bitrate Control (0x538b47d4 / 0x538b48b4)
+    # Changes base target bitrate for res_enum == 0 (movie_size = 3) from
+    # 75,000 kbps (0x000124f8) to 40,000 kbps (0x00009c40):
+    # - 30p: Target = 40 Mbps (40,000 kbps), Max = 48 Mbps (48,000 kbps)
+    # - 24p: Target = 32 Mbps (32,000 kbps), Max = 38.4 Mbps (38,400 kbps)
+    # Used by both H264 encoder init (0x538b5630) and OSD remaining time (0x538b4bb0).
     # -------------------------------------------------------------------------
     add_patch(
         changes,
         official_payload,
-        "table_movie_record_slot5_bitrate1",
-        "MovieRecordTable Slot 5 Bitrate 1 (0x54397a18): 120 Mbps (0x07270e00) -> 48 Mbps (0x02dc6c00)",
-        0x54397A18,
-        "000e2707",
-        struct.pack("<I", 48000000),
+        "h264_target_bitrate_movw",
+        "H264TargetBitrate (0x538b488c): movw r3, #0x9c40 (40,000 kbps base, down from 75,000)",
+        0x538B488C,
+        "f83402e3",
+        bytes.fromhex("403c09e3"),
     )
 
     add_patch(
         changes,
         official_payload,
-        "table_movie_record_slot6_bitrate1",
-        "MovieRecordTable Slot 6 Bitrate 1 (0x54397be8): 120 Mbps (0x07270e00) -> 48 Mbps (0x02dc6c00)",
-        0x54397BE8,
-        "000e2707",
-        struct.pack("<I", 48000000),
-    )
-
-    add_patch(
-        changes,
-        official_payload,
-        "table_movie_record_slot7_bitrate1",
-        "MovieRecordTable Slot 7 Bitrate 1 (0x54397db8): 100 Mbps (0x05f5e100) -> 38 Mbps (0x0243d580)",
-        0x54397DB8,
-        "00e1f505",
-        struct.pack("<I", 38000000),
-    )
-
-    add_patch(
-        changes,
-        official_payload,
-        "table_movie_record_slot7_bitrate2",
-        "MovieRecordTable Slot 7 Bitrate 2 (0x54397dd4): 100 Mbps (0x05f5e100) -> 38 Mbps (0x0243d580)",
-        0x54397DD4,
-        "00e1f505",
-        struct.pack("<I", 38000000),
-    )
-
-    add_patch(
-        changes,
-        official_payload,
-        "table_movie_record_slot8_bitrate1",
-        "MovieRecordTable Slot 8 Bitrate 1 (0x54397f88): 120 Mbps (0x07270e00) -> 38 Mbps (0x0243d580)",
-        0x54397F88,
-        "000e2707",
-        struct.pack("<I", 38000000),
-    )
-
-    add_patch(
-        changes,
-        official_payload,
-        "table_movie_record_slot8_bitrate2",
-        "MovieRecordTable Slot 8 Bitrate 2 (0x54397fa4): 120 Mbps (0x07270e00) -> 38 Mbps (0x0243d580)",
-        0x54397FA4,
-        "000e2707",
-        struct.pack("<I", 38000000),
+        "h264_target_bitrate_movt",
+        "H264TargetBitrate (0x538b4894): movt r3, #0 (upper 16 bits = 0 for 40,000 kbps)",
+        0x538B4894,
+        "013040e3",
+        bytes.fromhex("003040e3"),
     )
 
     return {
         "schema_version": 10,
         "codec": "h264",
-        "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.5 True Optical Readout & Bitrate Calibration)",
+        "name": "Ricoh GR IV v1.20 3K UHD H.264 Video Recording (v1.5.6 Full-Width 28mm Direct 3K & Bitrate Calibration)",
         "target": {
             "model": "GR IV Standard Edition",
             "firmware_version": "1.20",
@@ -544,7 +477,7 @@ def build() -> Path:
         print(f"[SUCCESS] Wrote firmware -> {out_p.resolve()} ({len(out_container):,} bytes)")
 
     print(
-        f"\n[SUMMARY] Built Ricoh GR IV v1.20 3K UHD (3072x1728) H.264 Firmware (v1.5.4 Rock-Solid 3K Direct Pipeline & Zero-Shatter Alignment):\n"
+        f"\n[SUMMARY] Built Ricoh GR IV v1.20 3K UHD (3072x1728) H.264 Firmware (v1.5.6 Full-Width 28mm Direct 3K & Bitrate Calibration):\n"
         f"  Container Size : {len(out_container):,} bytes\n"
         f"  Changed Bytes  : {len(changed)} bytes\n"
         f"  Frames Re-LZSS : {reemitted} frames\n"
